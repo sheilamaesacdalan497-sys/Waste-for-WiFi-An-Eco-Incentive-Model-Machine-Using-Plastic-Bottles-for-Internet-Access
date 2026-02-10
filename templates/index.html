@@ -1,0 +1,125 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>E-Connect — Waste-for-WiFi</title>
+    <link rel="stylesheet" href="/static/style.css">
+  </head>
+  <body>
+    <div class="card">
+      <div class="banner">The best connections wifi machine</div>
+      <div class="status success">
+        <div class="icon">📶</div>
+        <h1 id="connected-label">Connected</h1>
+        <div class="meta">IP: <span id="ip">-</span> | MAC: <span id="mac">-</span></div>
+        <div class="credits">ACCOUNT CREDITS: ₱<span id="credits">0</span></div>
+        <div class="remaining">REMAINING TIME:</div>
+        <div class="timer" id="timer">-- HR. -- MIN. -- SEC</div>
+      </div>
+
+      <div class="actions">
+        <button id="btn-insert" class="btn green">Insert Money</button>
+        <button id="btn-pause" class="btn red">Pause Time</button>
+        <button id="btn-rates" class="btn blue">Wifi Rates</button>
+        <div class="voucher">
+          <input id="voucher" placeholder="Enter Voucher here...">
+          <button id="btn-voucher" class="btn small">Submit</button>
+        </div>
+      </div>
+
+      <div class="footer">Powered By: LPB Piso Wifi</div>
+    </div>
+
+    <!-- Modals -->
+    <div id="modal-register" class="modal">
+      <div class="modal-content">
+        <h2>Register for Wi‑Fi</h2>
+        <p>Press the button to start a session.</p>
+        <button id="modal-register-btn" class="btn green">Register</button>
+        <button class="btn" onclick="closeModal('modal-register')">Close</button>
+      </div>
+    </div>
+
+    <div id="modal-rates" class="modal">
+      <div class="modal-content">
+        <h2>Wi‑Fi Rates</h2>
+        <p>1 bottle = 5 minutes (example). Configure rates in server settings.</p>
+        <button class="btn" onclick="closeModal('modal-rates')">Close</button>
+      </div>
+    </div>
+
+    <div id="modal-rating" class="modal">
+      <div class="modal-content">
+        <h2>Rate your experience</h2>
+        <label>Rating (1-5): <input id="rating-value" type="number" min="1" max="5"></label>
+        <label>Comment:<br><textarea id="rating-comment"></textarea></label>
+        <button id="submit-rating" class="btn green">Submit</button>
+      </div>
+    </div>
+
+    <script>
+      let sessionId = null;
+      async function openRegister() { document.getElementById('modal-register').style.display='block' }
+      function closeModal(id){ document.getElementById(id).style.display='none' }
+
+      document.getElementById('modal-register-btn').addEventListener('click', async ()=>{
+        const res = await fetch('/register', {method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'}});
+        const data = await res.json();
+        sessionId = data.session_id;
+        closeModal('modal-register');
+        pollStatus();
+        alert('Session created: '+sessionId);
+      })
+
+      document.getElementById('btn-insert').addEventListener('click', ()=> openRegister())
+      document.getElementById('btn-rates').addEventListener('click', ()=> document.getElementById('modal-rates').style.display='block')
+
+      document.getElementById('btn-voucher').addEventListener('click', async ()=>{
+        const v=document.getElementById('voucher').value;
+        alert('Voucher submitted: '+v);
+      })
+
+      async function pollStatus(){
+        if(!sessionId) return;
+        try{
+          const res = await fetch(`/api/session/${sessionId}/status`);
+          const data = await res.json();
+          document.getElementById('ip').innerText = data.ip || '-';
+          // mac not tracked yet
+          document.getElementById('mac').innerText = '-';
+          document.getElementById('timer').innerText = formatTime(data);
+          if(data.status==='expired'){
+            // show rating modal
+            document.getElementById('modal-rating').style.display='block'
+          }
+        }catch(e){console.error(e)}
+      }
+
+      function formatTime(data){
+        if(!data || data.status!=='active') return '-- HR. -- MIN. -- SEC';
+        const now = Math.floor(Date.now()/1000);
+        const end = data.end || 0;
+        let diff = Math.max(0, end - now);
+        const hrs = Math.floor(diff/3600); diff%=3600; const mins = Math.floor(diff/60); const secs = diff%60;
+        return `${hrs} HR. ${mins} MIN. ${secs} SEC`;
+      }
+
+      setInterval(pollStatus, 3000);
+
+      document.getElementById('submit-rating').addEventListener('click', async ()=>{
+        const rating = document.getElementById('rating-value').value || 0;
+        const comment = document.getElementById('rating-comment').value || '';
+        if(!sessionId) return alert('No session');
+        await fetch(`/api/rating/${sessionId}`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({rating, comment})});
+        closeModal('modal-rating');
+        alert('Thanks for rating');
+      })
+
+      // basic modal close click-outside
+      window.addEventListener('click', (e)=>{
+        if(e.target.classList.contains('modal')) closeModal(e.target.id)
+      })
+    </script>
+  </body>
+</html>
