@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, send_from_directory, render_template
 from pathlib import Path
 
 
@@ -38,8 +38,16 @@ def create_app(test_config=None):
 
     @app.route("/")
     def home():
-        from flask import render_template
         return render_template("index.html")
+
+    @app.route("/favicon.ico")
+    def favicon():
+        # serve favicon from project root (where app.py resides) if present
+        return send_from_directory(app.root_path, "favicon.ico")
+
+    @app.route('/rate.html')
+    def rate():
+        return render_template('rate.html')
 
     return app
 

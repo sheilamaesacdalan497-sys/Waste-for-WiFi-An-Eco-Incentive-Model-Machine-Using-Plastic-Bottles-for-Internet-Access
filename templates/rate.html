@@ -1,0 +1,179 @@
+<!doctype html>
+<html>
+  <head>
+    <link rel="icon" href="{{ url_for('favicon') }}" />
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Rate EcoNeT</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+  </head>
+  <body>
+    <div class="rating-root">
+      <header class="rating-hero">
+        <img src="/static/images/EcoNeT.png" alt="EcoNeT" class="brand-logo">
+        <div class="small">Rate your experience</div>
+      </header>
+
+      <main class="rating-main">
+        <form id="rating-form">
+          <input type="hidden" id="session-id" name="session_id" value="">
+
+          <p class="intro">Help us improve EcoNet by rating your experience below.
+Please rate the following statements from 1 (Strongly disagree) to 5 (Strongly agree).</p>
+
+          <!-- 10 Likert questions -->
+          <section class="question">
+            <label>1. The EcoNet machine is easily accessible to users in the community or school.</label>
+            <div class="likert" data-name="q1">
+              <label><input type="radio" name="q1" value="1"><span>1</span></label>
+              <label><input type="radio" name="q1" value="2"><span>2</span></label>
+              <label><input type="radio" name="q1" value="3"><span>3</span></label>
+              <label><input type="radio" name="q1" value="4"><span>4</span></label>
+              <label><input type="radio" name="q1" value="5"><span>5</span></label>
+            </div>
+          </section>
+
+          <section class="question">
+            <label>2. The machine accurately detects and accepts valid plastic bottles.</label>
+            <div class="likert" data-name="q2">
+              <label><input type="radio" name="q2" value="1"><span>1</span></label>
+              <label><input type="radio" name="q2" value="2"><span>2</span></label>
+              <label><input type="radio" name="q2" value="3"><span>3</span></label>
+              <label><input type="radio" name="q2" value="4"><span>4</span></label>
+              <label><input type="radio" name="q2" value="5"><span>5</span></label>
+            </div>
+          </section>
+
+          <section class="question">
+            <label>3. The internet time provided is correctly based on the number of bottles inserted.</label>
+            <div class="likert" data-name="q3">
+              <label><input type="radio" name="q3" value="1"><span>1</span></label>
+              <label><input type="radio" name="q3" value="2"><span>2</span></label>
+              <label><input type="radio" name="q3" value="3"><span>3</span></label>
+              <label><input type="radio" name="q3" value="4"><span>4</span></label>
+              <label><input type="radio" name="q3" value="5"><span>5</span></label>
+            </div>
+          </section>
+
+          <section class="question">
+            <label>4. The instructions for using the EcoNet machine are clear and easy to follow.</label>
+            <div class="likert" data-name="q4">
+              <label><input type="radio" name="q4" value="1"><span>1</span></label>
+              <label><input type="radio" name="q4" value="2"><span>2</span></label>
+              <label><input type="radio" name="q4" value="3"><span>3</span></label>
+              <label><input type="radio" name="q4" value="4"><span>4</span></label>
+              <label><input type="radio" name="q4" value="5"><span>5</span></label>
+            </div>
+          </section>
+
+          <section class="question">
+            <label>5. The overall process of using the machine is simple and user-friendly.</label>
+            <div class="likert" data-name="q5">
+              <label><input type="radio" name="q5" value="1"><span>1</span></label>
+              <label><input type="radio" name="q5" value="2"><span>2</span></label>
+              <label><input type="radio" name="q5" value="3"><span>3</span></label>
+              <label><input type="radio" name="q5" value="4"><span>4</span></label>
+              <label><input type="radio" name="q5" value="5"><span>5</span></label>
+            </div>
+          </section>
+
+          <section class="question">
+            <label>6. The EcoNet model can be sustained for long-term use in the community.</label>
+            <div class="likert" data-name="q6">
+              <label><input type="radio" name="q6" value="1"><span>1</span></label>
+              <label><input type="radio" name="q6" value="2"><span>2</span></label>
+              <label><input type="radio" name="q6" value="3"><span>3</span></label>
+              <label><input type="radio" name="q6" value="4"><span>4</span></label>
+              <label><input type="radio" name="q6" value="5"><span>5</span></label>
+            </div>
+          </section>
+
+          <section class="question">
+            <label>7. The EcoNet machine encourages continuous participation in proper plastic bottle disposal.</label>
+            <div class="likert" data-name="q7">
+              <label><input type="radio" name="q7" value="1"><span>1</span></label>
+              <label><input type="radio" name="q7" value="2"><span>2</span></label>
+              <label><input type="radio" name="q7" value="3"><span>3</span></label>
+              <label><input type="radio" name="q7" value="4"><span>4</span></label>
+              <label><input type="radio" name="q7" value="5"><span>5</span></label>
+            </div>
+          </section>
+
+          <section class="question">
+            <label>8. The implementation of the EcoNet machine helps reduce plastic waste in the community.</label>
+            <div class="likert" data-name="q8">
+              <label><input type="radio" name="q8" value="1"><span>1</span></label>
+              <label><input type="radio" name="q8" value="2"><span>2</span></label>
+              <label><input type="radio" name="q8" value="3"><span>3</span></label>
+              <label><input type="radio" name="q8" value="4"><span>4</span></label>
+              <label><input type="radio" name="q8" value="5"><span>5</span></label>
+            </div>
+          </section>
+
+          <section class="question">
+            <label>9. The internet connection provided by the machine is stable and reliable.</label>
+            <div class="likert" data-name="q9">
+              <label><input type="radio" name="q9" value="1"><span>1</span></label>
+              <label><input type="radio" name="q9" value="2"><span>2</span></label>
+              <label><input type="radio" name="q9" value="3"><span>3</span></label>
+              <label><input type="radio" name="q9" value="4"><span>4</span></label>
+              <label><input type="radio" name="q9" value="5"><span>5</span></label>
+            </div>
+          </section>
+
+          <section class="question">
+            <label>10. The EcoNet machine operates smoothly with minimal software, hardware, or power-related issues.</label>
+            <div class="likert" data-name="q10">
+              <label><input type="radio" name="q10" value="1"><span>1</span></label>
+              <label><input type="radio" name="q10" value="2"><span>2</span></label>
+              <label><input type="radio" name="q10" value="3"><span>3</span></label>
+              <label><input type="radio" name="q10" value="4"><span>4</span></label>
+              <label><input type="radio" name="q10" value="5"><span>5</span></label>
+            </div>
+          </section>
+
+          <section class="question">
+            <label>Comments (optional)</label>
+            <textarea id="rating-comment" name="comment" rows="4"></textarea>
+          </section>
+
+          <div class="form-actions">
+            <button id="rating-submit" class="btn green">Submit</button>
+            <a href="/" class="btn outline">Back</a>
+          </div>
+        </form>
+      </main>
+      <footer class="site-footer">© 2026 EcoNeT. All rights reserved.</footer>
+    </div>
+
+    <script>
+      function getSessionId(){
+        const path = window.location.pathname.split('/');
+        if(path.length >= 3 && path[1] === 'rating') return path[2] || '';
+        const url = new URL(window.location.href);
+        return url.searchParams.get('session_id') || '';
+      }
+
+      document.addEventListener('DOMContentLoaded', ()=>{
+        const sid = getSessionId();
+        const sidEl = document.getElementById('session-id'); if(sidEl) sidEl.value = sid;
+
+        document.getElementById('rating-form').addEventListener('submit', async (e)=>{
+          e.preventDefault();
+          const session = sid || document.getElementById('session-id').value;
+          if(!session) return alert('Session missing');
+          const payload = {};
+          for(let i=1;i<=10;i++){
+            payload[`q${i}`] = document.querySelector(`input[name="q${i}"]:checked`)?.value || 0;
+          }
+          payload.comment = document.getElementById('rating-comment').value || '';
+          try{
+            await fetch(`/api/rating/${session}`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+            alert('Thanks for your feedback');
+            window.location.href = '/';
+          }catch(err){ console.error(err); alert('Failed to submit'); }
+        });
+      });
+    </script>
+  </body>
+</html>

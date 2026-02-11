@@ -6,6 +6,7 @@ import sqlite3
 import os
 from flask import current_app, g
 from datetime import datetime, timezone
+import time
 
 
 def get_db():
@@ -47,6 +48,14 @@ def _ensure_tables():
 		)
 		"""
 	)
+	# ensure bottles column exists (add if missing)
+	cur.execute("PRAGMA table_info(sessions)")
+	cols = [r[1] for r in cur.fetchall()]
+	if "bottles" not in cols:
+		try:
+			cur.execute("ALTER TABLE sessions ADD COLUMN bottles INTEGER DEFAULT 0")
+		except Exception:
+			pass
 	cur.execute(
 		"""
 		CREATE TABLE IF NOT EXISTS ratings (
@@ -83,7 +92,7 @@ def revoke_session(session_id, end_time=None):
 	db = get_db()
 	db.execute(
 		"UPDATE sessions SET status = ?, end_time = ? WHERE id = ?",
-		("expired", end_time or datetime.now(timezone.utc), session_id),
+		("expired", int(end_time if end_time is not None else time.time()), session_id),
 	)
 	db.commit()
 
@@ -98,7 +107,38 @@ def add_rating(session_id, rating, comment=None):
 	db = get_db()
 	db.execute(
 		"INSERT INTO ratings (session_id, rating, comment, created_at) VALUES (?, ?, ?, ?)",
-		(session_id, rating, comment, datetime.now(timezone.utc)),
+		(session_id, rating, comment, int(time.time())),
 	)
 	db.commit()
+
+
+def extend_session(session_id, extra_seconds):
+	db = get_db()
+	cur = db.execute("SELECT end_time, bottles FROM sessions WHERE id = ?", (session_id,))
+	row = cur.fetchone()
+	now = int(time.time())
+	if row is None:
+		return None
+	end = row[0] or now
+	try:
+		end = int(end)
+	except Exception:
+		end = now
+	new_end = end + int(extra_seconds)
+	bottles = (row[1] or 0) + 1
+	db.execute("UPDATE sessions SET end_time = ?, bottles = ? WHERE id = ?", (new_end, bottles, session_id))
+	db.commit()
+	return {"end": new_end, "bottles": bottles}
+
+
+def migrate(app=None):
+	"""Run migrations to ensure schema compatibility.
+
+	If `app` is provided, run within its app_context so `get_db()` works.
+	"""
+	if app is not None:
+		with app.app_context():
+			_ensure_tables()
+		return True
+	return False
 
