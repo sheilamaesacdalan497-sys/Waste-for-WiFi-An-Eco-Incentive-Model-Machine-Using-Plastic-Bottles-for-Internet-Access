@@ -6,9 +6,17 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>EcoNet</title>
     <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/mock_dev.css">
   </head>
   <body>
     <div class="app-root">
+      <!-- Top-left connected indicator (mockable) -->
+      <div class="status-bar" id="status-bar" aria-hidden="false">
+        <div class="status-pill" id="status-pill"></span>
+          <span id="connected-label">Disconnected</span>
+        </div>
+      </div>
+
       <header class="hero">
         <img src="/static/images/EcoNeT.png" alt="EcoNeT" class="brand-logo">
         <div class="tag">Collect • Connect • Conserve</div>
@@ -18,14 +26,11 @@
       <div class="lead">Turn plastic bottles into free Wi-Fi access.<br>Help reduce waste while staying connected.</div>
 
       <main class="main-card">
-        <div class="status-bar">
-          <div class="status-dot" id="connection-dot">●</div>
-          <div class="status-label" id="connected-label">Connected</div>
-        </div>
-
-        <div class="timer-card" id="timer-card">
+        <!-- Timer card (Time Remaining) -->
+        <div class="timer-card" id="timer-card" aria-live="polite" role="status">
           <div class="timer-label">Time Remaining:</div>
-          <div class="timer" id="timer">--:--:--</div>
+          <!-- Ensure the countdown element exists and matches JS (#timer) -->
+          <div id="timer" class="timer">0 min. 00 sec.</div>
         </div>
 
         <div class="actions stacked">
@@ -42,6 +47,7 @@
     {# include modal partials for modular templates #}
     {% include 'partials/modal_insert_bottle.html' %}
     {% include 'partials/modal_howitworks.html' %}
+    {% include 'partials/mock_dev_panel.html' %}
 
     <script type="module" src="/static/js/init.js"></script>
   </body>

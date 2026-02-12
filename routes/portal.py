@@ -2,7 +2,7 @@ import os
 import subprocess
 from flask import Blueprint, render_template, request, redirect, url_for, current_app, jsonify
 from services.network import get_mac_for_ip
-
+import db
 bp = Blueprint("portal", __name__)
 
 
@@ -31,10 +31,26 @@ def waiting(session_id):
     return render_template("waiting.html", session_id=session_id, mock=current_app.config.get("MOCK_SENSOR", False))
 
 
-@bp.route("/api/session/<session_id>/status")
+@bp.route("/api/session/<int:session_id>/status")
 def session_status(session_id):
-    session_manager = current_app.extensions["session_manager"]
-    return jsonify(session_manager.status(session_id))
+    """Return basic session info for the UI (guard against server errors)."""
+    try:
+        session = db.get_session(session_id)
+        if not session:
+            return jsonify({"error": "session_not_found"}), 404
+
+        return jsonify({
+            "session_id": session["id"],
+            "status": session["status"],
+            "mac_address": session.get("mac_address"),
+            "ip_address": session.get("ip_address"),
+            "bottles_inserted": session.get("bottles_inserted", 0),
+            "session_start": session.get("session_start"),
+            "session_end": session.get("session_end"),
+        }), 200
+    except Exception:
+        current_app.logger.exception("Error fetching session status")
+        return jsonify({"error": "internal_server_error"}), 500
 
 
 def _get_mac_for_ip(ip):

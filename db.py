@@ -1,144 +1,383 @@
-("""Simple sqlite helpers for the captive portal.
-
-Provides: init_db(app), get_db(), close_db()
-""")
+"""
+Database schema and helpers for EcoNeT captive portal.
+Stores sessions, ratings, bottle logs, and system events.
+"""
+from flask import current_app, g
 import sqlite3
 import os
-from flask import current_app, g
 from datetime import datetime, timezone
-import time
 
+# Session status constants
+STATUS_AWAITING_INSERTION = 'awaiting_insertion'
+STATUS_INSERTING = 'inserting'
+STATUS_ACTIVE = 'active'
+STATUS_EXPIRED = 'expired'
+STATUS_DISCONNECTED = 'disconnected'
+
+ALL_SESSION_STATUSES = (
+    STATUS_AWAITING_INSERTION,
+    STATUS_INSERTING,
+    STATUS_ACTIVE,
+    STATUS_EXPIRED,
+    STATUS_DISCONNECTED,
+)
+
+DEFAULT_SESSION_STATUS = STATUS_AWAITING_INSERTION
+SECONDS_PER_BOTTLE = 120  # 2 minutes per bottle
 
 def get_db():
-	if "db" not in g:
-		db_path = current_app.config.get("DB_PATH")
-		os.makedirs(os.path.dirname(db_path), exist_ok=True)
-		g.db = sqlite3.connect(db_path, detect_types=sqlite3.PARSE_DECLTYPES)
-		g.db.row_factory = sqlite3.Row
-	return g.db
-
+    """Get or create database connection for current request."""
+    if 'db' not in g:
+        db_path = current_app.config.get('DB_PATH') or current_app.config.get('DATABASE')
+        if not db_path:
+            db_path = os.path.join(current_app.instance_path, 'wifi_portal.db')
+            os.makedirs(current_app.instance_path, exist_ok=True)
+        g.db = sqlite3.connect(db_path, detect_types=sqlite3.PARSE_DECLTYPES)
+        g.db.row_factory = sqlite3.Row
+        g.db.execute('PRAGMA foreign_keys = ON')
+    return g.db
 
 def close_db(e=None):
-	db = g.pop("db", None)
-	if db is not None:
-		db.close()
-
+    """Close database connection at end of request."""
+    db = g.pop('db', None)
+    if db is not None:
+        db.close()
 
 def init_db(app=None):
-	# if called with app instance, register teardown and create tables
-	if app is not None:
-		app.teardown_appcontext(close_db)
-		with app.app_context():
-			_ensure_tables()
+    """Initialize database with schema."""
+    if app:
+        with app.app_context():
+            db = get_db()
+            _create_tables(db)
+            db.commit()
+    else:
+        db = get_db()
+        _create_tables(db)
+        db.commit()
 
+def _create_tables(db):
+    """Create all tables with proper schema, indexes, and foreign keys."""
+    
+    # SESSIONS TABLE
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            mac_address TEXT NOT NULL,
+            ip_address TEXT,
+            bottles_inserted INTEGER DEFAULT 0,
+            seconds_earned INTEGER DEFAULT 0,
+            session_start INTEGER,
+            session_end INTEGER,
+            status TEXT DEFAULT 'awaiting_insertion',
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            CHECK (status IN ('awaiting_insertion', 'inserting', 'active', 'expired', 'disconnected'))
+        )
+    ''')
+    
+    # RATINGS TABLE
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS ratings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id INTEGER NOT NULL,
+            q1 INTEGER CHECK (q1 BETWEEN 1 AND 5),
+            q2 INTEGER CHECK (q2 BETWEEN 1 AND 5),
+            q3 INTEGER CHECK (q3 BETWEEN 1 AND 5),
+            q4 INTEGER CHECK (q4 BETWEEN 1 AND 5),
+            q5 INTEGER CHECK (q5 BETWEEN 1 AND 5),
+            q6 INTEGER CHECK (q6 BETWEEN 1 AND 5),
+            q7 INTEGER CHECK (q7 BETWEEN 1 AND 5),
+            q8 INTEGER CHECK (q8 BETWEEN 1 AND 5),
+            q9 INTEGER CHECK (q9 BETWEEN 1 AND 5),
+            q10 INTEGER CHECK (q10 BETWEEN 1 AND 5),
+            comment TEXT,
+            submitted_at INTEGER NOT NULL,
+            FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+        )
+    ''')
+    
+    # BOTTLE_LOGS TABLE
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS bottle_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id INTEGER NOT NULL,
+            detected_at INTEGER NOT NULL,
+            FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+        )
+    ''')
+    
+    # SYSTEM_LOGS TABLE
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS system_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_type TEXT NOT NULL,
+            description TEXT,
+            created_at INTEGER NOT NULL,
+            CHECK (event_type IN (
+                'session_started',
+                'session_expired',
+                'session_disconnected',
+                'bottle_inserted',
+                'rating_submitted'
+            ))
+        )
+    ''')
+    
+    # Create indexes
+    db.execute('CREATE INDEX IF NOT EXISTS idx_sessions_mac ON sessions(mac_address)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_sessions_created ON sessions(created_at)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_ratings_session ON ratings(session_id)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_bottle_logs_session ON bottle_logs(session_id)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_system_logs_type ON system_logs(event_type)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_system_logs_created ON system_logs(created_at)')
 
-def _ensure_tables():
-	db = get_db()
-	cur = db.cursor()
-	cur.execute(
-		"""
-		CREATE TABLE IF NOT EXISTS sessions (
-			id TEXT PRIMARY KEY,
-			ip TEXT,
-			mac TEXT,
-			status TEXT,
-			start_time TIMESTAMP,
-			end_time TIMESTAMP,
-			duration INTEGER
-		)
-		"""
-	)
-	# ensure bottles column exists (add if missing)
-	cur.execute("PRAGMA table_info(sessions)")
-	cols = [r[1] for r in cur.fetchall()]
-	if "bottles" not in cols:
-		try:
-			cur.execute("ALTER TABLE sessions ADD COLUMN bottles INTEGER DEFAULT 0")
-		except Exception:
-			pass
-	cur.execute(
-		"""
-		CREATE TABLE IF NOT EXISTS ratings (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			session_id TEXT,
-			rating INTEGER,
-			comment TEXT,
-			created_at TIMESTAMP
-		)
-		"""
-	)
-	db.commit()
+# ============================================================================
+# SESSION HELPERS
+# ============================================================================
 
-
-def create_session(session_id, ip, mac=None, status="waiting", duration=None):
-	db = get_db()
-	db.execute(
-		"INSERT OR REPLACE INTO sessions (id, ip, mac, status, start_time, end_time, duration) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		(session_id, ip, mac, status, None, None, duration),
-	)
-	db.commit()
-
-
-def update_session_start(session_id, start_time, duration):
-	db = get_db()
-	db.execute(
-		"UPDATE sessions SET status = ?, start_time = ?, end_time = ?, duration = ? WHERE id = ?",
-		("active", start_time, start_time + duration, duration, session_id),
-	)
-	db.commit()
-
-
-def revoke_session(session_id, end_time=None):
-	db = get_db()
-	db.execute(
-		"UPDATE sessions SET status = ?, end_time = ? WHERE id = ?",
-		("expired", int(end_time if end_time is not None else time.time()), session_id),
-	)
-	db.commit()
-
+def create_session(mac_address, ip_address=None):
+    """Create a new session in 'awaiting_insertion' status."""
+    db = get_db()
+    now = int(datetime.now(timezone.utc).timestamp())
+    
+    cursor = db.execute('''
+        INSERT INTO sessions (
+            mac_address, ip_address, bottles_inserted, seconds_earned,
+            status, created_at, updated_at
+        ) VALUES (?, ?, 0, 0, ?, ?, ?)
+    ''', (mac_address, ip_address, STATUS_AWAITING_INSERTION, now, now))
+    
+    db.commit()
+    session_id = cursor.lastrowid
+    
+    log_system_event('session_started', f'Session {session_id} created for MAC {mac_address}')
+    
+    return session_id
 
 def get_session(session_id):
-	db = get_db()
-	cur = db.execute("SELECT * FROM sessions WHERE id = ?", (session_id,))
-	return cur.fetchone()
+    """Get session by ID."""
+    db = get_db()
+    row = db.execute('SELECT * FROM sessions WHERE id = ?', (session_id,)).fetchone()
+    return dict(row) if row else None
+
+def get_session_by_mac(mac_address):
+    """Get active or inserting session by MAC address."""
+    db = get_db()
+    row = db.execute('''
+        SELECT * FROM sessions 
+        WHERE mac_address = ? AND status IN (?, ?, ?)
+        ORDER BY created_at DESC LIMIT 1
+    ''', (mac_address, STATUS_AWAITING_INSERTION, STATUS_INSERTING, STATUS_ACTIVE)).fetchone()
+    return dict(row) if row else None
+
+def update_session_status(session_id, status):
+    """Update session status."""
+    db = get_db()
+    now = int(datetime.now(timezone.utc).timestamp())
+    
+    db.execute('''
+        UPDATE sessions 
+        SET status = ?, updated_at = ?
+        WHERE id = ?
+    ''', (status, now, session_id))
+    
+    db.commit()
+    
+    if status == STATUS_EXPIRED:
+        log_system_event('session_expired', f'Session {session_id} expired')
+    elif status == STATUS_DISCONNECTED:
+        log_system_event('session_disconnected', f'Session {session_id} disconnected')
+
+def start_session(session_id):
+    """Activate session and set start/end times."""
+    db = get_db()
+    session = get_session(session_id)
+    if not session:
+        return False
+    
+    now = int(datetime.now(timezone.utc).timestamp())
+    session_end = now + session['seconds_earned']
+    
+    db.execute('''
+        UPDATE sessions 
+        SET status = ?, session_start = ?, session_end = ?, updated_at = ?
+        WHERE id = ?
+    ''', (STATUS_ACTIVE, now, session_end, now, session_id))
+    
+    db.commit()
+    return True
+
+def add_bottle_to_session(session_id, seconds_per_bottle=SECONDS_PER_BOTTLE):
+    """Register a bottle insertion and add time."""
+    db = get_db()
+    now = int(datetime.now(timezone.utc).timestamp())
+    
+    db.execute('''
+        UPDATE sessions 
+        SET bottles_inserted = bottles_inserted + 1,
+            seconds_earned = seconds_earned + ?,
+            updated_at = ?
+        WHERE id = ?
+    ''', (seconds_per_bottle, now, session_id))
+    
+    db.execute('''
+        INSERT INTO bottle_logs (session_id, detected_at)
+        VALUES (?, ?)
+    ''', (session_id, now))
+    
+    db.commit()
+    
+    log_system_event('bottle_inserted', f'Bottle added to session {session_id}')
+    
+    return True
+
+def extend_session(session_id, additional_seconds):
+    """Extend an active session by adding more time."""
+    db = get_db()
+    session = get_session(session_id)
+    if not session or session['status'] != STATUS_ACTIVE:
+        return False
+    
+    now = int(datetime.now(timezone.utc).timestamp())
+    new_end = session['session_end'] + additional_seconds
+    
+    db.execute('''
+        UPDATE sessions 
+        SET session_end = ?, seconds_earned = seconds_earned + ?, updated_at = ?
+        WHERE id = ?
+    ''', (new_end, additional_seconds, now, session_id))
+    
+    db.commit()
+    return True
+
+def update_session_start(session_id):
+    """Compatibility wrapper for older import name -> starts the session."""
+    return start_session(session_id)
+
+def revoke_session(session_id):
+    """Compatibility wrapper to mark a session as disconnected."""
+    update_session_status(session_id, 'disconnected')
+    return True
+
+# ============================================================================
+# RATING HELPERS
+# ============================================================================
+
+def submit_rating(session_id, answers, comment=None):
+    """Submit rating for a session."""
+    db = get_db()
+    now = int(datetime.now(timezone.utc).timestamp())
+    
+    db.execute('''
+        INSERT INTO ratings (
+            session_id, q1, q2, q3, q4, q5, q6, q7, q8, q9, q10,
+            comment, submitted_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        session_id,
+        answers.get('q1'), answers.get('q2'), answers.get('q3'),
+        answers.get('q4'), answers.get('q5'), answers.get('q6'),
+        answers.get('q7'), answers.get('q8'), answers.get('q9'),
+        answers.get('q10'),
+        comment,
+        now
+    ))
+    
+    db.commit()
+    
+    log_system_event('rating_submitted', f'Rating submitted for session {session_id}')
+    
+    return True
+
+def add_rating(session_id, answers, comment=None):
+    """
+    Compatibility wrapper for older import name used in routes.rating.
+    Delegates to submit_rating which contains the actual implementation.
+    """
+    return submit_rating(session_id, answers, comment)
+
+def get_rating_by_session(session_id):
+    """Get rating for a specific session."""
+    db = get_db()
+    row = db.execute('SELECT * FROM ratings WHERE session_id = ?', (session_id,)).fetchone()
+    return dict(row) if row else None
+
+# ============================================================================
+# LOGGING HELPERS
+# ============================================================================
+
+def log_system_event(event_type, description=None):
+    """Log a system event."""
+    db = get_db()
+    now = int(datetime.now(timezone.utc).timestamp())
+    
+    db.execute('''
+        INSERT INTO system_logs (event_type, description, created_at)
+        VALUES (?, ?, ?)
+    ''', (event_type, description, now))
+    
+    db.commit()
+
+def get_bottle_logs(session_id):
+    """Get all bottle insertions for a session."""
+    db = get_db()
+    rows = db.execute('''
+        SELECT * FROM bottle_logs 
+        WHERE session_id = ? 
+        ORDER BY detected_at ASC
+    ''', (session_id,)).fetchall()
+    return [dict(row) for row in rows]
+
+def get_system_logs(limit=100, event_type=None):
+    """Get recent system logs."""
+    db = get_db()
+    if event_type:
+        rows = db.execute('''
+            SELECT * FROM system_logs 
+            WHERE event_type = ?
+            ORDER BY created_at DESC 
+            LIMIT ?
+        ''', (event_type, limit)).fetchall()
+    else:
+        rows = db.execute('''
+            SELECT * FROM system_logs 
+            ORDER BY created_at DESC 
+            LIMIT ?
+        ''', (limit,)).fetchall()
+    return [dict(row) for row in rows]
+
+# ============================================================================
+# ANALYTICS HELPERS
+# ============================================================================
+
+def get_session_stats():
+    """Get overall session statistics."""
+    db = get_db()
+    stats = db.execute('''
+        SELECT 
+            COUNT(*) as total_sessions,
+            SUM(bottles_inserted) as total_bottles,
+            SUM(seconds_earned) as total_seconds,
+            AVG(bottles_inserted) as avg_bottles_per_session,
+            AVG(seconds_earned) as avg_seconds_per_session
+        FROM sessions
+    ''').fetchone()
+    return dict(stats) if stats else {}
+
+def get_rating_stats():
+    """Get rating statistics (average scores per question)."""
+    db = get_db()
+    stats = db.execute('''
+        SELECT 
+            COUNT(*) as total_ratings,
+            AVG(q1) as avg_q1, AVG(q2) as avg_q2, AVG(q3) as avg_q3,
+            AVG(q4) as avg_q4, AVG(q5) as avg_q5, AVG(q6) as avg_q6,
+            AVG(q7) as avg_q7, AVG(q8) as avg_q8, AVG(q9) as avg_q9,
+            AVG(q10) as avg_q10
+        FROM ratings
+    ''').fetchone()
+    return dict(stats) if stats else {}
 
 
-def add_rating(session_id, rating, comment=None):
-	db = get_db()
-	db.execute(
-		"INSERT INTO ratings (session_id, rating, comment, created_at) VALUES (?, ?, ?, ?)",
-		(session_id, rating, comment, int(time.time())),
-	)
-	db.commit()
-
-
-def extend_session(session_id, extra_seconds):
-	db = get_db()
-	cur = db.execute("SELECT end_time, bottles FROM sessions WHERE id = ?", (session_id,))
-	row = cur.fetchone()
-	now = int(time.time())
-	if row is None:
-		return None
-	end = row[0] or now
-	try:
-		end = int(end)
-	except Exception:
-		end = now
-	new_end = end + int(extra_seconds)
-	bottles = (row[1] or 0) + 1
-	db.execute("UPDATE sessions SET end_time = ?, bottles = ? WHERE id = ?", (new_end, bottles, session_id))
-	db.commit()
-	return {"end": new_end, "bottles": bottles}
-
-
-def migrate(app=None):
-	"""Run migrations to ensure schema compatibility.
-
-	If `app` is provided, run within its app_context so `get_db()` works.
-	"""
-	if app is not None:
-		with app.app_context():
-			_ensure_tables()
-		return True
-	return False
 

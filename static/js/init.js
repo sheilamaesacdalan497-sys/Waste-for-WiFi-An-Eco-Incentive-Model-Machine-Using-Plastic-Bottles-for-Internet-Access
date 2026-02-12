@@ -1,120 +1,116 @@
-import { $, openModal, closeModal, showToast } from './dom.js';
-import { setSessionFromUrl } from './session.js';
-import { formatTime, getUrlParam, getCurrentTimestamp } from './utils.js';
+import { $, openModal, closeModal } from './dom.js';
 import { startBottleTimer, stopBottleTimer, registerBottle } from './timer.js';
+import { initMockDevPanel } from './mockDevPanel.js';
+import {
+  getCurrentSessionId,
+  setCurrentSessionId,
+  activateSession,
+  updateButtonStates,
+  fetchAndUpdateSession
+} from './sessionManager.js';
 
-let timerInterval = null;
-
-// Update timer display and handle countdown
-function updateTimer(sessionData) {
-  const timerCard = $('timer-card');
-  const timerEl = $('timer');
+function attachGuardedButton(buttonId, onAllowed) {
+  const btn = document.getElementById(buttonId);
+  if (!btn) return;
   
-  if (!sessionData || !sessionData.expires_at) {
-    if (timerCard) timerCard.style.display = 'none';
+  const checkAndExecute = (e) => {
+    const sessionId = getCurrentSessionId();
+    if (!sessionId) {
+      e.preventDefault();
+      e.stopImmediatePropagation?.();
+      e.stopPropagation();
+      return;
+    }
+    if (typeof onAllowed === 'function') onAllowed(e);
+  };
+  
+  btn.addEventListener('click', checkAndExecute, { capture: true });
+}
+
+// Event: Session created via dev panel
+window.addEventListener('session-created', (e) => {
+  const id = e?.detail?.session_id;
+  if (!id) return;
+  setCurrentSessionId(id);
+  updateButtonStates({ status: 'awaiting_insertion' });
+  fetchAndUpdateSession(id);
+});
+
+// Event: Bottle registered (immediate feedback)
+window.addEventListener('bottle-registered', (e) => {
+  const d = e?.detail ?? {};
+  const session_id = d.session_id ?? getCurrentSessionId();
+  const bottles = Number(d.bottles ?? 0);
+  const seconds = Number(d.seconds ?? 0);
+  
+  if (!session_id) {
+    console.warn('bottle-registered: no session_id');
     return;
   }
   
-  // Calculate remaining time
-  const now = getCurrentTimestamp();
-  const expiresAt = sessionData.expires_at;
-  let remaining = expiresAt - now;
-  
-  if (remaining <= 0) {
-    timerEl.textContent = 'Expired';
-    timerCard.style.display = 'block';
-    showToast('Your session has expired. Insert more bottles to continue.');
-    if (timerInterval) clearInterval(timerInterval);
+  activateSession(session_id, bottles, seconds);
+});
+
+// Event: Bottles committed (final count)
+window.addEventListener('bottles-committed', (e) => {
+  const d = e?.detail ?? {};
+  const session_id = d.session_id ?? getCurrentSessionId();
+  const bottles = Number(d.bottles ?? 0);
+  const seconds = Number(d.seconds ?? 0);
+
+  if (!session_id) {
+    console.warn('bottles-committed: no session_id');
     return;
   }
+
+  activateSession(session_id, bottles, seconds);
+});
+
+// Initialize app
+document.addEventListener('DOMContentLoaded', () => {
+  const currentSessionId = getCurrentSessionId();
   
-  // Show timer card
-  timerCard.style.display = 'block';
-  timerEl.textContent = formatTime(remaining);
-  
-  // Start countdown
-  if (timerInterval) clearInterval(timerInterval);
-  timerInterval = setInterval(() => {
-    remaining--;
-    if (remaining <= 0) {
-      timerEl.textContent = 'Expired';
-      clearInterval(timerInterval);
-      showToast('Your session has expired.');
-    } else {
-      timerEl.textContent = formatTime(remaining);
-    }
-  }, 1000);
-}
+  // Set initial button states
+  updateButtonStates(currentSessionId ? { status: 'awaiting_insertion' } : null);
 
-// Fetch and update session timer
-async function fetchAndUpdateSession(sessionId) {
-  try {
-    const response = await fetch(`/api/session/${sessionId}`);
-    if (response.ok) {
-      const sessionData = await response.json();
-      updateTimer(sessionData);
-    }
-  } catch (error) {
-    console.error('Failed to fetch session:', error);
-  }
-}
+  // Attach guarded buttons
+  attachGuardedButton('btn-insert-bottle', () => {
+    const sessionId = getCurrentSessionId();
+    if (!sessionId) return;
+    openModal('modal-insert-bottle');
+    startBottleTimer(sessionId);
+  });
 
-// Initialize on page load
-document.addEventListener('DOMContentLoaded', async () => {
-  setSessionFromUrl();
-  
-  // Get current session and update timer
-  const sessionId = getUrlParam('session');
-  if (sessionId) {
-    await fetchAndUpdateSession(sessionId);
+  attachGuardedButton('btn-rate', () => {
+    openModal('modal-rate');
+  });
+
+  // Modal close handlers
+  const doneBtn = document.querySelector('.modal-close');
+  if (doneBtn) {
+    doneBtn.addEventListener('click', () => stopBottleTimer());
   }
 
-  // Button: Insert Bottle - start timer when modal opens
-  const insertBtn = $('btn-insert-bottle');
-  if (insertBtn) {
-    insertBtn.addEventListener('click', () => {
-      openModal('modal-insert-bottle');
-      startBottleTimer(); // Start the 3-minute countdown
-    });
-  }
-
-  // Button: How It Works
-  const howBtn = $('btn-howitworks');
-  if (howBtn) {
-    howBtn.addEventListener('click', () => {
-      openModal('modal-howitworks');
-    });
-  }
-
-  // Button: Rate EcoNeT
-  const rateBtn = $('btn-rate');
-  if (rateBtn) {
-    rateBtn.addEventListener('click', () => {
-      window.location.href = '/rate.html';
-    });
-  }
-
-  // Close modal buttons - stop timer when closing insert bottle modal
-  const closeButtons = document.querySelectorAll('.modal-close');
-  closeButtons.forEach(btn => {
+  document.querySelectorAll('.modal-close').forEach(btn => {
     btn.addEventListener('click', (e) => {
       const modal = e.target.closest('.modal');
-      if (modal) {
-        if (modal.id === 'modal-insert-bottle') {
-          stopBottleTimer();
-        }
-        closeModal(modal.id);
-      }
+      if (modal) closeModal(modal.id);
     });
   });
 
-  // TODO: Add event listener for actual bottle insertion
-  // This would come from your hardware/sensor integration
-  // Example:
-  // document.addEventListener('bottleInserted', () => {
-  //   registerBottle();
-  // });
+  // Mock bottle button (dev/testing)
+  const mockBottleBtn = $('mock-bottle-btn');
+  if (mockBottleBtn) {
+    mockBottleBtn.addEventListener('click', () => registerBottle());
+  }
+
+  // How it works button
+  const howBtn = $('btn-howitworks');
+  if (howBtn) {
+    howBtn.addEventListener('click', () => openModal('modal-howitworks'));
+  }
+
+  initMockDevPanel();
 });
 
-// Export for use in other modules
-export { updateTimer, fetchAndUpdateSession };
+export { fetchAndUpdateSession };
