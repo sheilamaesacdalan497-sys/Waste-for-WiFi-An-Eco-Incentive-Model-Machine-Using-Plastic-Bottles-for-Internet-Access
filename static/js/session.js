@@ -16,13 +16,31 @@ export async function registerSession(){
 }
 
 export async function sendBottle(){
-  if(!sessionId){ showToast('No session'); return; }
-  try{
-    const res = await fetch('/sensor/hit', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({session_id: sessionId})});
-    const data = await res.json();
-    if(data.ok){ await pollStatus(); }
-    else showToast('Bottle failed');
-  }catch(e){ console.error(e); showToast('Bottle error'); }
+  const sid = sessionStorage.getItem('econet_session');
+  if (!sid) {
+    showToast('No session found. Please reconnect.');
+    return;
+  }
+  
+  try {
+    const res = await fetch('/api/bottle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sid })
+    });
+    
+    if (res.ok) {
+      const data = await res.json();
+      showToast(`+${data.minutes_added} minutes added!`);
+      
+      // Refresh timer with updated session
+      updateTimer(data.session);
+    } else {
+      showToast('Failed to register bottle.');
+    }
+  } catch (err) {
+    showToast('Network error.');
+  }
 }
 
 export async function pollStatus(){

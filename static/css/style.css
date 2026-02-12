@@ -89,9 +89,28 @@ html { font-size: 16px; }
   margin: 0 auto;
 }
 .timer-card {
-  display: none; /* hidden until connected */
-  justify-content: center;
-  margin: 0.75rem 0;
+  display: none; /* hidden by default, shown when session active */
+  background: #fff;
+  border-radius: 12px;
+  padding: 1.5rem 1.25rem;
+  margin: 1.25rem 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  text-align: center;
+}
+.timer-card.active {
+  display: block;
+}
+.timer-label {
+  font-size: 1.1rem;
+  color: var(--primary);
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+.timer {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--accent-blue);
+  letter-spacing: 0.02em;
 }
 .actions.stacked {
   display: flex;
@@ -213,6 +232,20 @@ html { font-size: 16px; }
 .modal[style*="display: flex"] {
   display: flex !important; /* Show and center when triggered by JS */
 }
+
+.modal-header{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.info-text {
+  text-align: center;
+  margin: 0;
+}
+
 .modal .modal-card {
   background: #fff;
   color: var(--primary);
@@ -410,6 +443,48 @@ html { font-size: 16px; }
   }
   .tag {
 	font-size: 1rem;
+  }
+}
+
+/* Timer card styling */
+.timer-card {
+  display: none; /* hidden by default, shown when session active */
+  background: #fff;
+  border-radius: 12px;
+  padding: 1.5rem 1.25rem;
+  margin: 1.25rem 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  text-align: center;
+}
+
+.timer-card.active {
+  display: block;
+}
+
+.timer-label {
+  font-size: 1.1rem;
+  color: var(--primary);
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.timer {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--accent-blue);
+  letter-spacing: 0.02em;
+}
+
+/* Responsive sizing for mobile */
+@media (max-width: 420px) {
+  .timer-card {
+    padding: 1.25rem 1rem;
+  }
+  .timer-label {
+    font-size: 1rem;
+  }
+  .timer {
+    font-size: 1.5rem;
   }
 }
 

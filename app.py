@@ -1,5 +1,6 @@
-from flask import Flask, send_from_directory, render_template
+from flask import Flask, send_from_directory, render_template, request, jsonify
 from pathlib import Path
+from datetime import timedelta
 
 
 def create_app(test_config=None):
@@ -37,8 +38,15 @@ def create_app(test_config=None):
     app.register_blueprint(rating_bp)
 
     @app.route("/")
-    def home():
-        return render_template("index.html")
+    def index():
+        session_id = request.args.get('session')
+        session_data = None
+        
+        if session_id:
+            # Fetch session from database or in-memory store
+            session_data = app.extensions["session_manager"].get_session(session_id)
+            
+        return render_template('index.html', session=session_data)
 
     @app.route("/favicon.ico")
     def favicon():
@@ -48,6 +56,44 @@ def create_app(test_config=None):
     @app.route('/rate.html')
     def rate():
         return render_template('rate.html')
+
+    @app.route('/api/session/<session_id>')
+    def get_session_api(session_id):
+        session = app.extensions["session_manager"].get_session(session_id)
+        if not session:
+            return jsonify({'error': 'Session not found'}), 404
+        
+        return jsonify({
+            'session_id': session.id,
+            'expires_at': int(session.expires_at.timestamp()),
+            'bottles': session.bottles,
+            'minutes': session.minutes
+        })
+
+    @app.route('/api/bottle', methods=['POST'])
+    def register_bottle():
+        data = request.get_json()
+        session_id = data.get('session_id')
+        
+        session = app.extensions["session_manager"].get_session(session_id)
+        if not session:
+            return jsonify({'error': 'Invalid session'}), 400
+        
+        # Add 2 minutes per bottle
+        session.bottles += 1
+        session.minutes += 2
+        session.expires_at += timedelta(minutes=2)
+        app.extensions["session_manager"].save_session(session)
+        
+        return jsonify({
+            'minutes_added': 2,
+            'session': {
+                'session_id': session.id,
+                'expires_at': int(session.expires_at.timestamp()),
+                'bottles': session.bottles,
+                'minutes': session.minutes
+            }
+        })
 
     return app
 
