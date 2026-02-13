@@ -495,6 +495,12 @@ function makeExpireCallback(sessionId) {
       setCurrentSessionId(null);
       // notify listeners
       window.dispatchEvent(new CustomEvent('session-updated', { detail: { id: sessionId, status: 'expired' } }));
+      // ✅ Auto-refresh the page after expiry
+      try {
+        window.location.reload();
+      } catch (e) {
+        console.warn('Failed to reload page after session expiry', e);
+      }
     }
   };
 }

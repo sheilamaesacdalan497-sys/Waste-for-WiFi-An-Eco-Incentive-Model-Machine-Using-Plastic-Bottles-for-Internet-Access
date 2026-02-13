@@ -140,8 +140,17 @@ export function startSessionCountdown(sessionData, onExpire) {
 
   if (sessionTimerInterval) clearInterval(sessionTimerInterval);
 
+  // 🔔 one-time warning flags + toast helper
+  let warnedOneMinute = false;
+  let warnedThirtySeconds = false;
+  const toast =
+    typeof window !== 'undefined' && typeof window.showToast === 'function'
+      ? window.showToast
+      : null;
+
   sessionTimerInterval = setInterval(async () => {
     remaining--;
+
     if (remaining <= 0) {
       clearInterval(sessionTimerInterval);
       sessionTimerInterval = null;
@@ -151,8 +160,27 @@ export function startSessionCountdown(sessionData, onExpire) {
       }
       timerCard.classList.remove('active');
       timerCard.style.display = 'none';
+
+      // 🔄 Auto-refresh page when session expires
+      try {
+        window.location.reload();
+      } catch (e) {
+        console.warn('Failed to reload page after session expiry', e);
+      }
     } else {
       timerEl.textContent = formatSeconds(remaining);
+
+      // 🔔 Toasts at 60s and 30s remaining
+      if (toast) {
+        if (!warnedOneMinute && remaining === 60) {
+          warnedOneMinute = true;
+          toast('You have 1 minute left on your Wi‑Fi session. Please finalize your use.', 'info', 5000);
+        }
+        if (!warnedThirtySeconds && remaining === 30) {
+          warnedThirtySeconds = true;
+          toast('Only 30 seconds left on your Wi‑Fi session.', 'warning', 5000);
+        }
+      }
     }
   }, 1000);
 }
