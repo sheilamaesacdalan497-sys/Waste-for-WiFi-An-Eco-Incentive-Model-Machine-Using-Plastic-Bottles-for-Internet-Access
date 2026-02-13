@@ -114,18 +114,20 @@ def create_app(test_config=None):
         # ✅ Calculate session_end based on current status
         session_end = session.get('session_end')
         current_time = int(datetime.now(timezone.utc).timestamp())
-        
-        if session.get('status') == 'active':
-            # ✅ For ACTIVE sessions: extend from current remaining time
-            # If session_end exists and hasn't expired, add to remaining time
+        status = session.get('status')
+
+        # ✅ For sessions that already have an end time (active, or active→inserting),
+        #    always extend from the existing end.
+        if status == 'active' or (status == 'inserting' and session_end):
             if session_end and session_end > current_time:
                 # Extend from current end time
                 session_end += (count * 120)
             else:
-                # Session expired, restart from now
+                # Session expired or had no valid end; restart from now
                 session_end = current_time + (count * 120)
         else:
-            # ✅ For INSERTING sessions: session_end not set yet (will be set on activation)
+            # ✅ Pure INSERTING / AWAITING sessions without an active timer:
+            #     session_end will be set on activation.
             session_end = None
 
         # Update database

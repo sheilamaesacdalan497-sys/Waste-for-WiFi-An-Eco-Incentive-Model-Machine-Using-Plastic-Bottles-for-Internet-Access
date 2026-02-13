@@ -9,7 +9,8 @@ let pendingSessionData = null;
 let bottleCount = 0;
 let isCommitting = false;
 let serverBottleCount = 0; // track server-side known count to avoid double-posting
-
+let wasActiveBeforeInsertion = false; // track if session was active when insert modal opened
+let lastActiveSessionBeforeInsertion = null; // snapshot of active session before insertion modal
 // Expose for timer/UI modules
 if (typeof window !== 'undefined') {
   window.sessionManager = {
@@ -38,6 +39,17 @@ export async function createSession(mac_address = null, ip_address = null) {
   if (mac_address) payload.mac_address = mac_address;
   if (ip_address) payload.ip_address = ip_address;
 
+  // Remember if we had an already-active session (with a running timer)
+  const prev = pendingSessionData;
+  const now = Math.floor(Date.now() / 1000);
+  wasActiveBeforeInsertion = !!(
+    prev &&
+    prev.status === 'active' &&
+    prev.session_end &&
+    prev.session_end > now
+  );
+  lastActiveSessionBeforeInsertion = wasActiveBeforeInsertion ? { ...prev } : null;
+
   try {
     console.log('createSession: requesting insertion lock...');
     const res = await acquireInsertionLock(payload);
@@ -64,8 +76,13 @@ export async function createSession(mac_address = null, ip_address = null) {
       status: returnedSession.status || 'inserting',
       bottles_inserted: returnedSession.bottles_inserted || 0,
       seconds_earned: returnedSession.seconds_earned || 0,
-      session_start: null,
-      session_end: null,
+      // Preserve start/end if we came from an already-active session (for UI/logic)
+      session_start: wasActiveBeforeInsertion
+        ? (returnedSession.session_start || prev?.session_start || null)
+        : null,
+      session_end: wasActiveBeforeInsertion
+        ? (returnedSession.session_end || prev?.session_end || null)
+        : null,
       owner: info.owner || window.location.hostname
     };
     if (pendingSessionData.id) setCurrentSessionId(pendingSessionData.id);
@@ -201,7 +218,13 @@ window.addEventListener('bottles-committed', async (ev) => {
 
     // Was this session already active (i.e., had a running timer) before opening the modal?
     const wasAlreadyActive =
-      !!(pendingSessionData && pendingSessionData.session_start && pendingSessionData.session_end);
+      wasActiveBeforeInsertion ||
+      !!(
+        pendingSessionData &&
+        pendingSessionData.session_start &&
+        pendingSessionData.session_end &&
+        pendingSessionData.session_end > Math.floor(Date.now() / 1000)
+      );
 
     // Compute delta vs what server already knows to avoid double-increment.
     const delta = Math.max(0, bottles - (serverBottleCount || 0));
@@ -230,11 +253,37 @@ window.addEventListener('bottles-committed', async (ev) => {
     }
 
     if (wasAlreadyActive) {
-      // 💡 Session was already running; don't re-activate (which would recompute/reset session_end).
-      // Just refresh from the server so the countdown (#timer) uses the updated session_end.
+      // Session was already running; do NOT re-activate (that would reset the timer).
+      // Instead, release the insertion lock so the server clears the lock,
+      // then reload the session and keep it active on the client.
       try {
-        await lookupSession(); // existing helper; keeps server as single source of truth
-        updateConnectionStatus(true);
+        await unlockInsertion();
+      } catch (e) {
+        console.warn('Failed to unlock insertion after commit for active session', e);
+      }
+
+      try {
+        const refreshed = await apiGetSession(sessionId);
+        if (refreshed) {
+          const now = Math.floor(Date.now() / 1000);
+          const merged = {
+            ...(lastActiveSessionBeforeInsertion || {}),
+            ...refreshed,
+            status: 'active' // force active on client if we know it was active before
+          };
+          // If session_end is still in the future, keep the countdown running
+          if (merged.session_end && merged.session_end > now) {
+            loadSession(merged);
+            updateConnectionStatus(true);
+            console.log('Resumed active session after commit with updated time:', merged);
+          } else {
+            // Fallback: if for some reason there is no remaining time, just load as-is
+            loadSession(refreshed);
+          }
+        } else {
+          console.warn('apiGetSession returned no data after commit; falling back to lookupSession');
+          await lookupSession();
+        }
       } catch (e) {
         console.error('Failed to refresh session after committing bottles for active session', e);
       }
@@ -281,6 +330,8 @@ window.addEventListener('bottles-committed', async (ev) => {
   } finally {
     bottleCount = 0;
     isCommitting = false;
+    wasActiveBeforeInsertion = false;        // reset flag after each commit flow
+    lastActiveSessionBeforeInsertion = null; // clear snapshot
   }
 });
 
