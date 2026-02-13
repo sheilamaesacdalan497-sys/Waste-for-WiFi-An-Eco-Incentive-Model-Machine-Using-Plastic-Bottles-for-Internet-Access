@@ -339,7 +339,6 @@ export function loadSession(session) {
 // Replace lookupSession to use loadSession
 export async function lookupSession() {
   try {
-    console.log('lookupSession: requesting /api/session/lookup (via api module)');
     const body = await apiLookupSession();
     const session = body.session || body;
     const resumed = body.resumed || false;

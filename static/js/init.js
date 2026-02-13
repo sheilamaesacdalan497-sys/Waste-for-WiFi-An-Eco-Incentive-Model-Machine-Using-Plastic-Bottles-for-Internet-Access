@@ -28,18 +28,21 @@ function attachGuardedButton(buttonId, onAllowed) {
 
 document.addEventListener('DOMContentLoaded', async () => {
   try {
-    console.log('DOMContentLoaded handler running');
-
     // Lookup or create session for this device when portal opens
     const session = await lookupSession();
-    let currentSessionStatus = session?.status || (session && session.session && session.session.status) || 'awaiting_insertion';
+    let currentSessionStatus =
+      session?.status ||
+      (session && session.session && session.session.status) ||
+      'awaiting_insertion';
     console.log('Session lookup result:', session, 'status:', currentSessionStatus);
 
     // Initialize UI state
     const sessionId = getCurrentSessionId();
-    updateButtonStates(sessionId ? { status: currentSessionStatus, session_id: sessionId } : null);
+    updateButtonStates(
+      sessionId ? { status: currentSessionStatus, session_id: sessionId } : null
+    );
 
-    // Insert Bottle button
+    // Insert Bottle button — single handler
     const insertBtn = $('btn-insert-bottle');
     if (insertBtn) {
       insertBtn.addEventListener('click', async (e) => {
@@ -51,12 +54,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Acquire insertion lock
         if (currentSessionStatus !== 'inserting' && currentSessionStatus !== 'active') {
           try {
-            const res = await createSession();
+            const res = await createSession(); // shows toast on 409 and throws
             sid = res?.session?.id || getCurrentSessionId() || sid;
-            currentSessionStatus = res?.status || res?.session?.status || 'inserting';
-            console.log('Insertion lock acquired — session:', sid, 'status:', currentSessionStatus);
+            currentSessionStatus =
+              res?.status || res?.session?.status || 'inserting';
+            console.log(
+              'Insertion lock acquired — session:',
+              sid,
+              'status:',
+              currentSessionStatus
+            );
           } catch (err) {
             console.warn('Could not acquire insertion lock', err);
+            // Important: do NOT open modal here; toast already shown by createSession()
             return;
           }
         }
@@ -73,19 +83,26 @@ document.addEventListener('DOMContentLoaded', async () => {
               currentSeconds = Number(srv?.seconds_earned ?? 0);
             }
           }
-        } catch (e) {
-          console.warn('Failed to load session data', e);
+        } catch (e2) {
+          console.warn('Failed to load session data', e2);
         }
 
         // Open modal
         openModal('modal-insert-bottle');
-        console.log('Opened insert-bottle modal for session:', sid, 'bottles:', currentBottles, 'seconds:', currentSeconds);
-        
+        console.log(
+          'Opened insert-bottle modal for session:',
+          sid,
+          'bottles:',
+          currentBottles,
+          'seconds:',
+          currentSeconds
+        );
+
         // Start timer with session data
-        try { 
-          startBottleTimer(sid, currentBottles, currentSeconds); 
-        } catch (e) { 
-          console.warn('startBottleTimer error', e); 
+        try {
+          startBottleTimer(sid, currentBottles, currentSeconds);
+        } catch (e3) {
+          console.warn('startBottleTimer error', e3);
         }
       });
     }
@@ -96,7 +113,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       modalCloseX.addEventListener('click', async (e) => {
         e.preventDefault();
         console.log('Modal X clicked — cancelling insertion and closing modal');
-        try { await cancelInsertion(); } catch (err) { console.error('cancelInsertion error', err); }
+        try {
+          await cancelInsertion();
+        } catch (err) {
+          console.error('cancelInsertion error', err);
+        }
         closeModal('modal-insert-bottle');
       });
     }
@@ -106,7 +127,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (rateBtn) {
       rateBtn.addEventListener('click', (e) => {
         e.preventDefault();
-        const sid = getCurrentSessionId() || new URL(window.location.href).searchParams.get('session_id') || new URL(window.location.href).searchParams.get('session');
+        const sid =
+          getCurrentSessionId() ||
+          new URL(window.location.href).searchParams.get('session_id') ||
+          new URL(window.location.href).searchParams.get('session');
         if (!sid) {
           console.warn('Rate clicked but no session id available');
           return;
@@ -127,10 +151,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     const howBtn = $('btn-howitworks');
-    if (howBtn) howBtn.addEventListener('click', () => openModal('modal-howitworks'));
+    if (howBtn) {
+      howBtn.addEventListener('click', () => openModal('modal-howitworks'));
+    }
 
     initMockDevPanel();
   } catch (err) {
     console.error('Error in DOMContentLoaded handler:', err);
   }
 });
+
+// No extra btn-insert-bottle handlers below this line

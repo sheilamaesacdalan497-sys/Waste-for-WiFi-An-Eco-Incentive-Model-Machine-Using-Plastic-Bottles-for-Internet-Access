@@ -77,5 +77,4 @@ export function updateButtonStates(sessionData) {
   if (rateBtn) rateBtn.disabled = false;
 
   try { setConnected(status === 'active'); } catch (e) {}
-  console.log('ui.updateButtonStates: session exists -> insert disabled:', insertBtn ? insertBtn.disabled : 'n/a', 'label:', insertBtn ? insertBtn.textContent : 'n/a');
 }
