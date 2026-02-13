@@ -209,8 +209,26 @@ window.addEventListener('bottles-committed', async (ev) => {
       console.warn('bottles-committed: no session id available');
       return;
     }
+
+    // If no bottles were inserted, release the insertion lock so status is restored
     if (!bottles || bottles <= 0) {
-      console.warn('bottles-committed: no bottles to commit for session', sessionId);
+      console.log('bottles-committed: no bottles - releasing insertion lock for', sessionId);
+      try {
+        await unlockInsertion();
+      } catch (e) {
+        console.warn('Failed to unlock insertion for empty commit', e);
+      }
+      try {
+        const refreshed = await apiGetSession(sessionId);
+        if (refreshed) {
+          loadSession(refreshed);
+          updateConnectionStatus(refreshed.status === 'active');
+        } else {
+          await lookupSession();
+        }
+      } catch (e) {
+        console.warn('Failed to refresh session after empty commit', e);
+      }
       return;
     }
 
