@@ -1,0 +1,426 @@
+.admin-root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem 1.25rem 1rem;
+  color: var(--white);
+  background: transparent; /* Let body gradient show through */
+}
+
+.admin-header {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0 0 1.5rem;
+}
+
+.admin-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.55rem;
+}
+
+.brand-logo.small {
+  max-width: 7rem;
+  width: 7rem;
+}
+
+.admin-title-group h1 {
+  margin: 0;
+  font-size: 1.9rem;
+}
+
+.admin-subtitle {
+  margin: 0.15rem 0 0;
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+.admin-main {
+  flex: 1 0 auto;
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Cards / panels */
+
+.admin-card {
+  background: #F0F0F0;
+  color: #0b2840;
+  border-radius: 1rem;
+  padding: 1.25rem 1.25rem;
+  box-shadow: 0 0.75rem 1.875rem rgba(0, 0, 0, 0.45);
+}
+
+.admin-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.kpi {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.kpi-label {
+  font-size: 0.9rem;
+  color: #4a5c7a;
+  margin-bottom: 0.35rem;
+  font-weight: 500;
+}
+
+.kpi-value {
+  font-size: 2rem;
+  font-weight: 750;
+}
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 1fr); /* 2:1 ratio - Ongoing Sessions wider */
+  gap: 1rem;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.panel-full {
+  grid-column: 1 / -1;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.panel-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.panel-subtitle {
+  margin: 0.1rem 0 0;
+  font-size: 0.9rem;
+  color: #4a5c7a;
+}
+
+.panel-body {
+  margin-top: 0.25rem;
+}
+
+/* Filters in header */
+
+.panel-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: flex-end;
+}
+
+.panel-filter label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.85rem;
+  color: #4a5c7a;
+}
+
+.panel-filter input,
+.panel-filter select {
+  margin-top: 0.2rem;
+  padding: 0.35rem 0.45rem;
+  border-radius: 0.45rem;
+  border: 1px solid rgba(11, 40, 64, 0.18);
+  background: #ffffff;
+  color: #0b2840;
+  font-size: 0.85rem;
+}
+
+.panel-filter input::placeholder {
+  color: #8b95b5;
+}
+
+.panel-filter input:focus,
+.panel-filter select:focus {
+  outline: none;
+  border-color: rgba(11, 40, 64, 0.6);
+}
+
+/* Ratings summary grid */
+
+.ratings-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  gap: 1rem;
+}
+
+.ratings-summary-item {
+  background: #ffffff;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  text-align: center;
+  box-shadow: 0 0.35rem 1rem rgba(0, 0, 0, 0.06);
+}
+
+.ratings-summary-item .rs-label {
+  font-size: 0.8rem;
+  color: #4a5c7a;
+  margin-bottom: 0.1rem;
+}
+
+.ratings-summary-item .rs-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.ratings-summary-item.composite {
+  grid-column: 1 / -1;
+}
+
+/* Tables */
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 1rem; /* Increased from 0.9rem */
+  background: #ffffff;
+  color: #0b2840;
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+.admin-table tbody td {
+  padding-top: 0.75rem; /* Add space between header and body */
+}
+
+/* responsive wrapper for tables */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+}
+
+/* Ratings table widths (slightly increased first two cols) */
+
+.admin-table--ratings th:nth-child(1),
+.admin-table--ratings td:nth-child(1) {
+  width: 10.5rem;
+}
+
+.admin-table--ratings th:nth-child(2),
+.admin-table--ratings td:nth-child(2) {
+  width: 8rem;
+}
+
+.admin-table--ratings th:nth-child(3),
+.admin-table--ratings th:nth-child(4),
+.admin-table--ratings th:nth-child(5),
+.admin-table--ratings th:nth-child(6),
+.admin-table--ratings th:nth-child(7),
+.admin-table--ratings th:nth-child(8),
+.admin-table--ratings th:nth-child(9),
+.admin-table--ratings th:nth-child(10),
+.admin-table--ratings th:nth-child(11),
+.admin-table--ratings th:nth-child(12),
+.admin-table--ratings th:nth-child(13),
+.admin-table--ratings td:nth-child(3),
+.admin-table--ratings td:nth-child(4),
+.admin-table--ratings td:nth-child(5),
+.admin-table--ratings td:nth-child(6),
+.admin-table--ratings td:nth-child(7),
+.admin-table--ratings td:nth-child(8),
+.admin-table--ratings td:nth-child(9),
+.admin-table--ratings td:nth-child(10),
+.admin-table--ratings td:nth-child(11),
+.admin-table--ratings td:nth-child(12),
+.admin-table--ratings td:nth-child(13) {
+  width: 3.1rem;
+  text-align: center;
+}
+
+.admin-table--ratings th:nth-child(14),
+.admin-table--ratings td:nth-child(14) {
+  width: 40%;
+}
+
+/* Center all td in User Reviews table */
+.admin-table--ratings td {
+  text-align: center;
+}
+
+/* also center headers to match */
+.admin-table--ratings th {
+  text-align: center;
+}
+
+/* Center cells in Ongoing Sessions table */
+.panel-ongoing .admin-table th,
+.panel-ongoing .admin-table td {
+  text-align: center;
+}
+
+/* Pagination */
+
+.table-pagination {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.6rem;
+  font-size: 0.85rem;
+}
+
+.table-pagination button {
+  border: 1px solid rgba(11, 40, 64, 0.2);
+  background: #ffffff;
+  color: #0b2840;
+  padding: 0.25rem 0.55rem;
+  border-radius: 0.4rem;
+  cursor: pointer;
+  min-width: 2rem;
+}
+
+.table-pagination button.active {
+  background: #0b2840;
+  color: #ffffff;
+}
+
+.table-pagination button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.table-pagination span {
+  color: #4a5c7a;
+}
+
+.site-footer{
+    padding-top: 2rem;
+    padding-bottom: 3rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Log out button styling (reduced width) */
+.site-footer .admin-logout {
+  display: inline-block;
+  width: 75rem;    
+  min-width: 16rem;     
+  background: var(--primary);
+  color: #ffffff;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.7rem 1rem;
+  text-align: center;
+  text-decoration: none;
+}
+
+.site-footer .admin-logout:hover,
+.site-footer .admin-logout:focus {
+  text-decoration: none;
+  filter: brightness(1.05);
+}
+
+/* Responsive */
+
+@media (max-width: 900px) {
+  .admin-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .admin-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .admin-header {
+    margin-bottom: 1.25rem;
+  }
+
+  .panel-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .panel-filter {
+    justify-content: flex-start;
+  }
+
+  .admin-table {
+    font-size: 0.9rem; /* Slightly smaller on mobile */
+  }
+
+  .admin-table--ratings {
+    font-size: 0.8rem;
+  }
+}
+
+/* Center card content for admin login and improve alignment */
+.app-root .card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 1.5rem;
+}
+
+/* Login form container: constrained width, centered fields */
+.admin-login-form {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  align-items: stretch;
+}
+
+/* Labels and inputs larger and spaced */
+.admin-login-field label {
+  display: block;  
+  font-size: 0.95rem;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+}
+.admin-login-field input {
+  width: 100%;
+  padding: 0.75rem 0.9rem;
+  font-size: 1rem;
+  border-radius: 0.6rem;
+  border: 1px solid rgba(11, 40, 64, 0.15);
+  background: #fff;
+  color: #0b2840;
+  box-shadow: none;
+}
+
+/* Submit button full-width and larger */
+.admin-login-form .btn.done-btn {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  font-size: 1rem;
+  border-radius: 0.6rem;
+}
+
+/* Center header/logo/text inside card */
+.card .hero,
+.card .tag,
+.card .lead {
+  text-align: center;
+}
+
+/* Slightly reduce max-width on small screens */
+@media (max-width: 700px) {
+  .admin-login-form { max-width: 92%; }
+  .brand-logo { width: 60%; }
+}

@@ -29,6 +29,9 @@ html, body {
 
 body {
   background: linear-gradient(180deg, var(--primary), var(--accent-blue));
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  background-size: cover;
   margin: 0;
   display: flex;
   flex-direction: column;

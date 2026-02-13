@@ -1,27 +1,100 @@
-from flask import Flask, current_app, make_response, redirect, send_from_directory, render_template, request, jsonify, url_for
-from pathlib import Path
-from datetime import datetime, timezone
-import db
-import threading
+# filepath: d:\Users\Lexar\OneDrive - MSFT\Documents\GitHub\Waste-for-WiFi-An-Eco-Incentive-Model-Machine-Using-Plastic-Bottles-for-Internet-Access\app.py
+import os
 import time
+import json
+import threading
+import argparse
+from functools import wraps
+from flask import Flask, current_app, make_response, redirect, send_from_directory, render_template, request, jsonify, url_for, Response, session
+from pathlib import Path
+from datetime import datetime, timezone, timedelta
+from flask_sock import Sock
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+import db
+
+sock = Sock()
+
+ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
+
+def _check_admin_credentials(username, password):
+    return username == ADMIN_USERNAME and password == ADMIN_PASSWORD
+
+# ✅ Only session-based admin protection (no leftover basic-auth helpers)
+def require_admin(view_func):
+    @wraps(view_func)
+    def wrapper(*args, **kwargs):
+        if not session.get("is_admin"):
+            next_url = request.path
+            return redirect(url_for("admin_login", next=next_url))
+        return view_func(*args, **kwargs)
+    return wrapper
+
+def _build_admin_payload():
+    """Compute metrics for admin dashboard."""
+    db_conn = db.get_db()
+    now_utc = int(datetime.now(timezone.utc).timestamp())
+
+    # Active sessions
+    active_count_row = db_conn.execute(
+        "SELECT COUNT(*) FROM sessions WHERE status = ?", (db.STATUS_ACTIVE,)
+    ).fetchone()
+    active_count = active_count_row[0] if active_count_row else 0
+
+    # Bottles today + total bottles + total reviews
+    bottles_today = db.count_bottles_today_ph()
+    total_bottles = db.count_bottles_total()
+    total_reviews = db.count_total_reviews()
+
+    # All ongoing sessions: awaiting_insertion + inserting + active
+    ongoing_rows = db_conn.execute(
+        """
+        SELECT id, mac_address, ip_address, status,
+               bottles_inserted, seconds_earned, session_end, updated_at
+        FROM sessions
+        WHERE status IN (?, ?, ?)
+        ORDER BY updated_at DESC
+        """,
+        (db.STATUS_AWAITING_INSERTION, db.STATUS_INSERTING, db.STATUS_ACTIVE),
+    ).fetchall()
+    ongoing_sessions = [dict(row) for row in ongoing_rows]
+
+    # All-time rating means
+    rating_means = db.get_ratings_means_all_time()
+
+    return {
+        "active_sessions": active_count,
+        "bottles_today": bottles_today,
+        "total_bottles": total_bottles,
+        "total_reviews": total_reviews,
+        "rating_means": rating_means,
+        "ongoing_sessions": ongoing_sessions,
+        "generated_at": now_utc,
+    }
 
 def create_app(test_config=None):
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_mapping(
-        SECRET_KEY="dev",
-        DB_PATH=str(Path(app.instance_path) / "wifi_portal.db"),
+        SECRET_KEY=os.environ.get("SECRET_KEY", "dev"),
+        DB_PATH=os.environ.get("DB_PATH", os.path.join(app.instance_path, "wifi_portal.db")),
         SESSION_DURATION=300,
-        MOCK_SENSOR=True,
-        STALE_SESSION_AGE=600,       # seconds before awaiting_insertion is considered stale
-        CLEANUP_INTERVAL=60,        # how often to run cleanup (seconds)
+        MOCK_SENSOR=os.environ.get("MOCK_SENSOR", "true").lower() == "true",
+        STALE_SESSION_AGE=int(os.environ.get("STALE_SESSION_AGE", 600)),
+        CLEANUP_INTERVAL=int(os.environ.get("CLEANUP_INTERVAL", 60)),
+        INSERTING_LOCK_TIMEOUT=int(os.environ.get("INSERTING_LOCK_TIMEOUT", 180)),
     )
 
     if test_config:
         app.config.update(test_config)
 
     Path(app.instance_path).mkdir(parents=True, exist_ok=True)
-
-    # Initialize DB and ensure teardown is registered
+    sock.init_app(app)
     db.init_db(app)
     app.teardown_appcontext(db.close_db)
 
@@ -33,11 +106,15 @@ def create_app(test_config=None):
                     stale_awaiting = db.expire_stale_awaiting_sessions(
                         application.config.get("STALE_SESSION_AGE", 600)
                     )
+                    stale_inserting = db.expire_stale_inserting_sessions(
+                        application.config.get("INSERTING_LOCK_TIMEOUT", 180)
+                    )
                     finished_active = db.expire_finished_active_sessions()
-                    if stale_awaiting or finished_active:
+                    if stale_awaiting or stale_inserting or finished_active:
                         application.logger.debug(
-                            "Session cleanup: expired %d stale awaiting_insertion, %d finished active",
+                            "Session cleanup: expired %d stale awaiting_insertion, %d stale inserting, %d finished active",
                             stale_awaiting,
+                            stale_inserting,
                             finished_active,
                         )
                 except Exception as e:
@@ -70,7 +147,56 @@ def create_app(test_config=None):
         session_id = request.args.get("session")
         return render_template("rate.html", session_id=session_id)
 
-    # Session retrieval
+    # ---------------- ADMIN HTTP ENDPOINTS ----------------
+
+    @app.route("/admin/login", methods=["GET", "POST"])
+    def admin_login():
+        error = None
+        if request.method == "POST":
+            username = request.form.get("username", "")
+            password = request.form.get("password", "")
+            if _check_admin_credentials(username, password):
+                session["is_admin"] = True
+                session["admin_username"] = username
+                next_url = request.args.get("next") or url_for("admin_dashboard")
+                return redirect(next_url)
+            else:
+                error = "Invalid username or password."
+        return render_template("admin_login.html", error=error)
+
+    @app.route("/admin/logout")
+    @require_admin
+    def admin_logout():
+        session.clear()
+        return redirect(url_for("admin_login"))
+
+    @app.route("/admin")
+    @require_admin
+    def admin_dashboard():
+        """Render admin dashboard."""
+        return render_template("admin.html")
+    
+    @app.route("/api/admin/metrics")
+    @require_admin
+    def admin_metrics():
+        """HTTP endpoint for admin metrics (fallback when WebSocket not available)."""
+        payload = _build_admin_payload()
+        return jsonify(payload)
+
+    @app.route("/api/admin/ratings")
+    @require_admin
+    def admin_ratings():
+        """
+        Return ratings filtered only by PH date range:
+        - from, to: YYYY-MM-DD
+        """
+        from_date = request.args.get("from")
+        to_date = request.args.get("to")
+        ratings = db.get_ratings_by_date_range(from_date=from_date, to_date=to_date)
+        return jsonify(ratings)
+
+    # ---------------- EXISTING API ENDPOINTS ----------------
+
     @app.route("/api/session/<int:session_id>")
     def get_session_api(session_id):
         session = db.get_session(session_id)
@@ -78,82 +204,71 @@ def create_app(test_config=None):
             return jsonify({"error": "Session not found"}), 404
         return jsonify(session)
 
-    # Bottle registration
     @app.route("/api/bottle", methods=["POST"])
     def insert_bottle():
         """Handle bottle insertion - allows both 'inserting' and 'active' statuses"""
-        data = request.get_json()
+        data = request.get_json() or {}
         session_id = data.get('session_id')
         count = data.get('count', 1)  # Allow bulk insert
 
         if not session_id:
-            return jsonify({'error': 'session_id required'}), 400
+            return jsonify({"error": "session_id is required"}), 400
 
         try:
-            session_id = int(session_id)
+            count = int(count)
+            if count <= 0:
+                raise ValueError
         except (ValueError, TypeError):
-            return jsonify({'error': 'Invalid session_id'}), 400
+            return jsonify({"error": "count must be a positive integer"}), 400
 
         session = db.get_session(session_id)
         if not session:
-            return jsonify({'error': 'Session not found'}), 404
+            return jsonify({"error": "Session not found"}), 404
 
-        # ✅ Allow bottles for both 'inserting' and 'active' statuses
         if session.get('status') not in ['inserting', 'active']:
-            return jsonify({
-                'error': f'Session is not accepting bottles (status: {session.get("status")})'
-            }), 400
+            return jsonify({"error": "Session not accepting bottles"}), 409
 
-        # Update bottle count and total seconds earned
         bottles_before = session.get('bottles_inserted', 0)
         seconds_before = session.get('seconds_earned', 0)
-        
-        new_bottles = bottles_before + count
-        new_total_seconds = seconds_before + (count * 120)  # Track total seconds earned
 
-        # ✅ Calculate session_end based on current status
+        new_bottles = bottles_before + count
+        new_total_seconds = seconds_before + (count * db.SECONDS_PER_BOTTLE)
+
         session_end = session.get('session_end')
         current_time = int(datetime.now(timezone.utc).timestamp())
         status = session.get('status')
 
-        # ✅ For sessions that already have an end time (active, or active→inserting),
-        #    always extend from the existing end.
         if status == 'active' or (status == 'inserting' and session_end):
-            if session_end and session_end > current_time:
-                # Extend from current end time
-                session_end += (count * 120)
-            else:
-                # Session expired or had no valid end; restart from now
-                session_end = current_time + (count * 120)
+            # extend from existing end
+            base_end = session_end or current_time
+            session_end = base_end + (count * db.SECONDS_PER_BOTTLE)
         else:
-            # ✅ Pure INSERTING / AWAITING sessions without an active timer:
-            #     session_end will be set on activation.
-            session_end = None
+            # new end from now
+            session_end = current_time + (count * db.SECONDS_PER_BOTTLE)
 
-        # Update database
         success = db.update_session(session_id, {
             'bottles_inserted': new_bottles,
             'seconds_earned': new_total_seconds,
-            'session_end': session_end
+            'session_end': session_end,
         })
 
         if not success:
-            return jsonify({'error': 'Failed to update session'}), 500
+            return jsonify({"error": "Failed to update session"}), 500
 
-        # Calculate remaining time for response
+        # log bottles in bottle_logs
+        db.log_bottles(session_id, count=count)
+
         remaining_seconds = 0
         if session_end and session_end > current_time:
             remaining_seconds = session_end - current_time
 
         return jsonify({
-            'session_id': session_id,
-            'bottles_inserted': new_bottles,
-            'minutes_earned': new_total_seconds // 60,
-            'seconds_earned': new_total_seconds,
-            'session_end': session_end,
-            'remaining_seconds': remaining_seconds,
-            'status': session.get('status')
-        }), 200
+            "success": True,
+            "session_id": session_id,
+            "bottles_inserted": new_bottles,
+            "seconds_earned": new_total_seconds,
+            "remaining_seconds": remaining_seconds,
+        })
 
     # Start / activate session
     @app.route("/api/session/<int:session_id>/activate", methods=["POST"])
@@ -416,8 +531,30 @@ def create_app(test_config=None):
     return app
 
 
+# ---------------- WEBSOCKET ROUTE (ADMIN) ----------------
+
+@sock.route("/ws/admin")
+def admin_ws(ws):
+    """
+    WebSocket stream sending admin metrics every few seconds.
+    Uses Flask session set by /admin/login.
+    """
+    # Cookies (and thus Flask session) are available during the WS handshake
+    if not session.get("is_admin"):
+        ws.close()
+        return
+
+    interval = 5  # seconds
+    while True:
+        try:
+            payload = _build_admin_payload()
+            ws.send(json.dumps(payload))
+            time.sleep(interval)
+        except Exception:
+            break
+
+
 if __name__ == "__main__":
-    import argparse
     parser = argparse.ArgumentParser(description="EcoNeT captive portal")
     parser.add_argument("--mock", dest="mock", action="store_true", help="Enable mock sensor")
     parser.add_argument("--no-mock", dest="mock", action="store_false", help="Disable mock sensor")

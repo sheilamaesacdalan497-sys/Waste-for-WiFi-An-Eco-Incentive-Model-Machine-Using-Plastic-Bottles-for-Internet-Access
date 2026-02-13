@@ -90,22 +90,46 @@ function handleTimerEnd() {
 }
 
 // ✅ registerBottle now increments from current state
-export function registerBottle() {
-  bottleCount += 1;
-  const bottleCountEl = $('bottle-count');
-  const timeEarnedEl = $('time-earned');
-  const doneBtn = $('btn-done-insert');
-  const helper = $('insert-helper');
+export async function registerBottle(count = 1) {
+  if (!currentSessionId) {
+    console.warn('registerBottle: no currentSessionId');
+    return;
+  }
 
-  if (bottleCountEl) bottleCountEl.textContent = String(bottleCount);
-  if (timeEarnedEl) timeEarnedEl.textContent = `${Math.floor((bottleCount * SECONDS_PER_BOTTLE) / 60)} minutes`;
-  if (helper) helper.style.display = 'none';
-  if (doneBtn) { doneBtn.disabled = false; doneBtn.classList.remove('disabled'); }
+  try {
+    const res = await fetch('/api/bottle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: currentSessionId, count })
+    });
 
-  // notify others (optional)
-  window.dispatchEvent(new CustomEvent('bottle-registered', {
-    detail: { session_id: currentSessionId, bottles: bottleCount, seconds: bottleCount * SECONDS_PER_BOTTLE }
-  }));
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      console.error('registerBottle: /api/bottle failed', res.status, body);
+      if (window.showToast) {
+        window.showToast(body.error || 'Failed to register bottle', 'error', 4000);
+      }
+      return;
+    }
+
+    const data = await res.json().catch(() => ({}));
+    const bottles = Number(data.bottles_inserted ?? 0);
+    const seconds = Number(data.seconds_earned ?? 0);
+
+    // Notify sessionManager so it can update bottle-count + time-earned
+    window.dispatchEvent(new CustomEvent('bottle-registered', {
+      detail: {
+        session_id: currentSessionId,
+        bottles,
+        seconds
+      }
+    }));
+  } catch (err) {
+    console.error('registerBottle error', err);
+    if (window.showToast) {
+      window.showToast('Error registering bottle', 'error', 4000);
+    }
+  }
 }
 
 function formatSeconds(sec) {

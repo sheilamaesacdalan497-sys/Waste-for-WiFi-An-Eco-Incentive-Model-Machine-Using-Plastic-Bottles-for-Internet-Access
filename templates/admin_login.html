@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+  <head>
+    <link rel="icon" href="{{ url_for('favicon') }}" />
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>EcoNeT Admin Login</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/admin.css">
+  </head>
+  <body>
+    <div class="app-root">
+      <main class="main-card">
+        <div class="card">
+          <header class="hero" style="padding-top: 1rem; padding-bottom: 1rem;">
+            <img src="/static/images/EcoNeT.png" alt="EcoNeT" class="brand-logo">
+            <div class="tag">Admin Access</div>
+            <div class="lead">Sign in to view the EcoNeT admin dashboard.</div>
+          </header>
+
+          <form method="post" class="admin-login-form">
+            {% if error %}
+              <div class="admin-login-error">{{ error }}</div>
+            {% endif %}
+            <div class="admin-login-field">
+              <label for="username">Username</label>
+              <input id="username" name="username" type="text" required autofocus>
+            </div>
+            <div class="admin-login-field">
+              <label for="password">Password</label>
+              <input id="password" name="password" type="password" required>
+            </div>
+            <button type="submit" class="btn done-btn" style="margin-top: 1rem;">Log In</button>
+          </form>
+
+          <div class="meta" style="margin-top: 1.5rem; text-align: center; font-size: 0.8rem; color: var(--muted);">
+            Use your configured admin credentials.
+          </div>
+        </div>
+      </main>
+      <footer class="site-footer">© 2026 EcoNeT. All rights reserved.</footer>
+    </div>
+  </body>
+</html>

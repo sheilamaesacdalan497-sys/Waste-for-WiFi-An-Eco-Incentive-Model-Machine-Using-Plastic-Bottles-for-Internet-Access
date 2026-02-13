@@ -58,9 +58,6 @@ export function initMockDevPanel() {
         }
       }
 
-      // ✅ Check if modal is open (user is in insertion mode)
-      const isModalOpen = document.getElementById('modal-insert-bottle')?.classList.contains('active');
-      
       if (!sessionId) {
         showToast('No active session. Please click "Insert Bottle" first.', 'error');
         return;
@@ -73,7 +70,6 @@ export function initMockDevPanel() {
           body: JSON.stringify({ session_id: sessionId })
         });
 
-        // ✅ Check content type before parsing
         const contentType = response.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) {
           const text = await response.text();
@@ -88,33 +84,23 @@ export function initMockDevPanel() {
           if (sessionInfo) {
             const status = data.status || 'active';
             const endTime = data.session_end ? new Date(data.session_end * 1000).toLocaleTimeString() : 'N/A';
-            sessionInfo.innerHTML = `✅ Session ID: ${sessionId}<br>Status: ${status}<br>Bottles: ${data.bottles_inserted}<br>Time: ${data.minutes_earned} min<br>Ends: ${endTime}`;
+            sessionInfo.innerHTML = `✅ Session ID: ${sessionId} <br>Status: ${status} (expires at ${endTime})`;
           }
-          showToast(`Bottle inserted! +2 min (Total: ${data.minutes_earned} min)`, 'success');
+          showToast(`Bottle inserted!`, 'success');
           
-          // ✅ If modal is open, trigger the registerBottle to update UI
-          if (isModalOpen) {
-            try {
-              const { registerBottle } = await import('./timer.js');
-              registerBottle();
-            } catch (err) {
-              console.error('registerBottle error', err);
-            }
-          }
-          
-          // ✅ Notify session manager
-          try { 
-            bottleInserted(sessionId, data.bottles_inserted, data.minutes_earned); 
+          // ❌ REMOVE extra server call via registerBottle (it was doubling bottles)
+          // ✅ Instead, notify session manager with correct minutes
+          try {
+            const minutesEarned = Number((data.seconds_earned || 0) / 60);
+            bottleInserted(sessionId, data.bottles_inserted, minutesEarned);
           } catch (err) { 
             console.error('bottleInserted error', err); 
           }
         } else {
-          // ✅ Better error handling
           const errorMsg = data.error || data.message || 'Failed to insert bottle';
           showToast(`❌ ${errorMsg}`, 'error', 5000);
           console.error('Bottle insert failed:', data);
           
-          // ✅ If session is expired/disconnected, suggest starting new session
           if (errorMsg.includes('not accepting bottles') || errorMsg.includes('expired')) {
             showToast('Session ended. Click "Insert Bottle" to start new session.', 'info', 5000);
           }
@@ -152,8 +138,9 @@ export function initMockDevPanel() {
         localStorage.removeItem('session_id');
         window.mockSessionId = null;
 
-        // Request new session (will get fresh device_id)
-        await createSession();
+        // ✅ Lookup/create a fresh session in awaiting_insertion state
+        await lookupSession();
+
         showToast('Started new session as new user', 'success');
         await refreshSessionInfo();
       } catch (err) {

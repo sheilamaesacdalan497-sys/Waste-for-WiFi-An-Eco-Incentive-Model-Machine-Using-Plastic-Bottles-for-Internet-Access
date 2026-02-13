@@ -5,7 +5,7 @@ Stores sessions, ratings, bottle logs, and system events.
 from flask import current_app, g
 import sqlite3
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 # Session status constants
 STATUS_AWAITING_INSERTION = 'awaiting_insertion'
@@ -96,7 +96,7 @@ def _create_tables(db):
         )
     ''')
 
-    # ✅ RATINGS TABLE (needed by submit_rating)
+    # RATINGS TABLE (needed by submit_rating)
     db.execute('''
         CREATE TABLE IF NOT EXISTS ratings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -109,6 +109,19 @@ def _create_tables(db):
         )
     ''')
     db.execute('CREATE INDEX IF NOT EXISTS idx_ratings_session ON ratings(session_id)')
+
+    # BOTTLE_LOGS TABLE
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS bottle_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id INTEGER NOT NULL,
+            count INTEGER NOT NULL DEFAULT 1,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+        )
+    ''')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_bottle_logs_session ON bottle_logs(session_id)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_bottle_logs_created_at ON bottle_logs(created_at)')
 
     # Create indexes
     db.execute('CREATE INDEX IF NOT EXISTS idx_sessions_mac ON sessions(mac_address)')
@@ -221,8 +234,8 @@ def add_bottle_to_session(session_id, seconds_per_bottle=SECONDS_PER_BOTTLE):
     ''', (seconds_per_bottle, now, session_id))
     
     db.execute('''
-        INSERT INTO bottle_logs (session_id, detected_at)
-        VALUES (?, ?)
+        INSERT INTO bottle_logs (session_id, count, created_at)
+        VALUES (?, 1, ?)
     ''', (session_id, now))
     
     db.commit()
@@ -310,31 +323,109 @@ def log_system_event(event_type, description=None):
     db.commit()
 
 def get_bottle_logs(session_id):
-    """Get all bottle insertions for a session."""
+    """Return all bottle_logs for a session."""
     db = get_db()
-    rows = db.execute('''
-        SELECT * FROM bottle_logs 
-        WHERE session_id = ? 
-        ORDER BY detected_at ASC
-    ''', (session_id,)).fetchall()
-    return [dict(row) for row in rows]
+    rows = db.execute(
+        'SELECT * FROM bottle_logs WHERE session_id = ? ORDER BY created_at ASC',
+        (session_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
 
-def get_system_logs(limit=100, event_type=None):
-    """Get recent system logs."""
+# ---------------- RATINGS (ADMIN FILTER) ----------------
+
+def get_ratings_means_all_time():
+    """
+    All-time mean per question (Q1–Q10) and composite mean (average of question means).
+    Each rating row has equal weight.
+    """
     db = get_db()
-    if event_type:
-        rows = db.execute('''
-            SELECT * FROM system_logs 
-            WHERE event_type = ?
-            ORDER BY created_at DESC 
-            LIMIT ?
-        ''', (event_type, limit)).fetchall()
-    else:
-        rows = db.execute('''
-            SELECT * FROM system_logs 
-            ORDER BY created_at DESC 
-            LIMIT ?
-        ''', (limit,)).fetchall()
+    row = db.execute(
+        """
+        SELECT
+            AVG(q1)  AS q1,
+            AVG(q2)  AS q2,
+            AVG(q3)  AS q3,
+            AVG(q4)  AS q4,
+            AVG(q5)  AS q5,
+            AVG(q6)  AS q6,
+            AVG(q7)  AS q7,
+            AVG(q8)  AS q8,
+            AVG(q9)  AS q9,
+            AVG(q10) AS q10
+        FROM ratings
+        """
+    ).fetchone()
+
+    if not row:
+        return {}
+
+    means = {}
+    for i in range(1, 11):
+        key = f"q{i}"
+        val = row[key]
+        means[key] = float(val) if val is not None else None
+
+    vals = [v for v in means.values() if v is not None]
+    composite = float(sum(vals) / len(vals)) if vals else None
+    means["composite"] = composite
+    return means
+
+def get_ratings_filtered(from_date=None, to_date=None, min_avg=None,
+                         question=None, qmin=None, qmax=None):
+    """
+    Filter ratings for admin:
+    - from_date, to_date: 'YYYY-MM-DD' (Philippines date)
+    - min_avg: minimum average of q1..q10
+    - question: int 1–10; qmin,qmax: inclusive value range for that question
+    """
+    db = get_db()
+    params = []
+    where = ["1=1"]
+
+    # Date range in Philippines time
+    ph_tz = timezone(timedelta(hours=8))
+
+    def _date_range_to_utc(date_str, end=False):
+        y, m, d = map(int, date_str.split("-"))
+        local = datetime(y, m, d, tzinfo=ph_tz)
+        if end:
+            local = local + timedelta(days=1)
+        return int(local.astimezone(timezone.utc).timestamp())
+
+    if from_date:
+        start_ts = _date_range_to_utc(from_date, end=False)
+        where.append("r.submitted_at >= ?")
+        params.append(start_ts)
+    if to_date:
+        end_ts = _date_range_to_utc(to_date, end=True)
+        where.append("r.submitted_at < ?")
+        params.append(end_ts)
+
+    if min_avg is not None:
+        avg_expr = "(" + "+".join([f"COALESCE(r.q{i},0)" for i in range(1, 11)]) + ")/10.0"
+        where.append(avg_expr + " >= ?")
+        params.append(float(min_avg))
+
+    if question is not None and 1 <= question <= 10 and qmin is not None:
+        qcol = f"r.q{question}"
+        where.append(f"{qcol} >= ?")
+        params.append(int(qmin))
+        if qmax is not None:
+            where.append(f"{qcol} <= ?")
+            params.append(int(qmax))
+
+    sql = f"""
+        SELECT
+            r.*,
+            s.mac_address,
+            s.ip_address,
+            s.created_at AS session_created_at
+        FROM ratings r
+        LEFT JOIN sessions s ON r.session_id = s.id
+        WHERE {' AND '.join(where)}
+        ORDER BY r.submitted_at DESC
+    """
+    rows = db.execute(sql, tuple(params)).fetchall()
     return [dict(row) for row in rows]
 
 # ============================================================================
@@ -619,6 +710,28 @@ def expire_finished_active_sessions():
     db.commit()
     return cur.rowcount
 
+def expire_stale_inserting_sessions(max_age_seconds=180):
+    """
+    Mark sessions with status=inserting whose updated_at is older than max_age_seconds as expired.
+    This frees the machine if someone started insertion and then abandoned it.
+    """
+    db = get_db()
+    now = int(datetime.now(timezone.utc).timestamp())
+    cutoff = now - int(max_age_seconds)
+    cur = db.cursor()
+    cur.execute(
+        """
+        UPDATE sessions
+        SET status = ?, updated_at = ?
+        WHERE status = ?
+          AND updated_at IS NOT NULL
+          AND updated_at < ?
+        """,
+        (STATUS_EXPIRED, now, STATUS_INSERTING, cutoff),
+    )
+    db.commit()
+    return cur.rowcount
+
 def update_session(session_id, updates):
     """Update session fields
     
@@ -654,6 +767,102 @@ def update_session(session_id, updates):
     except Exception as e:
         print(f"Error updating session {session_id}: {e}")
         return False
+
+# ============================================================================
+# BOTTLE LOG HELPERS
+# ============================================================================
+
+def log_bottles(session_id, count=1):
+    """Insert a bottle_logs row for this session (supports bulk count)."""
+    db = get_db()
+    now = int(datetime.now(timezone.utc).timestamp())
+    db.execute(
+        'INSERT INTO bottle_logs (session_id, count, created_at) VALUES (?, ?, ?)',
+        (session_id, int(count), now),
+    )
+    db.commit()
+
+# ============================================================================
+# BOTTLE METRICS + REVIEWS HELPERS (for admin dashboard)
+# ============================================================================
+
+def count_bottles_between(start_ts: int, end_ts: int) -> int:
+    """
+    Count total bottles between [start_ts, end_ts) using bottle_logs.count.
+    """
+    db = get_db()
+    row = db.execute(
+        'SELECT COALESCE(SUM(count), 0) FROM bottle_logs WHERE created_at >= ? AND created_at < ?',
+        (int(start_ts), int(end_ts)),
+    ).fetchone()
+    return row[0] if row else 0
+
+
+def count_bottles_today_ph() -> int:
+    """
+    Count bottles inserted today based on Philippines local date (UTC+8).
+    Timestamps in DB are stored as UTC seconds.
+    """
+    ph_tz = timezone(timedelta(hours=8))
+    now_ph = datetime.now(ph_tz)
+    start_ph = datetime(now_ph.year, now_ph.month, now_ph.day, tzinfo=ph_tz)
+    end_ph = start_ph + timedelta(days=1)
+    start_utc = int(start_ph.astimezone(timezone.utc).timestamp())
+    end_utc = int(end_ph.astimezone(timezone.utc).timestamp())
+    return count_bottles_between(start_utc, end_utc)
+
+
+def count_bottles_total() -> int:
+    """Total bottles ever inserted."""
+    db = get_db()
+    row = db.execute('SELECT COALESCE(SUM(count), 0) FROM bottle_logs').fetchone()
+    return row[0] if row else 0
+
+
+def count_total_reviews() -> int:
+    """Total number of ratings (all time)."""
+    db = get_db()
+    row = db.execute('SELECT COUNT(*) FROM ratings').fetchone()
+    return row[0] if row else 0
+
+
+def get_ratings_by_date_range(from_date: str | None = None, to_date: str | None = None):
+    """
+    Return ratings filtered only by PH date range [from, to].
+    Dates are strings YYYY-MM-DD in PH local date.
+    """
+    db = get_db()
+    conditions = []
+    params = []
+
+    ph_tz = timezone(timedelta(hours=8))
+
+    if from_date:
+        try:
+            d = datetime.strptime(from_date, "%Y-%m-%d").replace(tzinfo=ph_tz)
+            start_utc = int(d.astimezone(timezone.utc).timestamp())
+            conditions.append("submitted_at >= ?")
+            params.append(start_utc)
+        except ValueError:
+            pass
+
+    if to_date:
+        try:
+            d = datetime.strptime(to_date, "%Y-%m-%d").replace(tzinfo=ph_tz)
+            end_ph = d + timedelta(days=1)
+            end_utc = int(end_ph.astimezone(timezone.utc).timestamp())
+            conditions.append("submitted_at < ?")
+            params.append(end_utc)
+        except ValueError:
+            pass
+
+    sql = "SELECT * FROM ratings"
+    if conditions:
+        sql += " WHERE " + " AND ".join(conditions)
+    sql += " ORDER BY submitted_at DESC"
+
+    rows = db.execute(sql, params).fetchall()
+    return [dict(r) for r in rows]
 
 
 

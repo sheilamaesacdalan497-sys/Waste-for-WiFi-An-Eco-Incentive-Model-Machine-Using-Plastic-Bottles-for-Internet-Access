@@ -1,0 +1,168 @@
+<!doctype html>
+<html>
+  <head>
+    <link rel="icon" href="{{ url_for('favicon') }}" />
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>EcoNeT Admin</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/admin.css">
+  </head>
+  <body>
+    <div class="admin-root">
+      <header class="admin-header">
+        <div class="admin-brand">
+          <img src="/static/images/EcoNeT.png" alt="EcoNeT" class="brand-logo small">
+          <div class="admin-title-group">
+            <h1>EcoNeT Admin Dashboard</h1>
+            <p class="admin-subtitle">Live overview of sessions, bottles, and feedback.</p>
+          </div>
+        </div>
+      </header>
+
+      <main class="admin-main">
+        <!-- KPI cards -->
+        <section class="admin-kpis">
+          <div class="admin-card kpi">
+            <div class="kpi-label">Active Sessions</div>
+            <div class="kpi-value" id="kpi-active-sessions">0</div>
+          </div>
+          <div class="admin-card kpi">
+            <div class="kpi-label">Bottles Today</div>
+            <div class="kpi-value" id="kpi-bottles-today">0</div>
+          </div>
+          <div class="admin-card kpi">
+            <div class="kpi-label">Total Bottles</div>
+            <div class="kpi-value" id="kpi-total-bottles">0</div>
+          </div>
+          <div class="admin-card kpi">
+            <div class="kpi-label">Total Reviews</div>
+            <div class="kpi-value" id="kpi-total-reviews">0</div>
+          </div>
+        </section>
+
+        <!-- Ongoing Sessions + Ratings Summary (swapped positions, 2:1 ratio) -->
+        <section class="admin-grid">
+          <!-- Ongoing Sessions (left, wider) -->
+          <div class="admin-card panel panel-ongoing">
+            <header class="panel-header">
+              <div>
+                <h2>Ongoing Sessions</h2>
+                <p class="panel-subtitle">Waiting, inserting, and active Wi‑Fi sessions.</p>
+              </div>
+              <form id="ongoing-filter-form" class="panel-filter">
+                <label>
+                  Status
+                  <select name="status">
+                    <option value="">All</option>
+                    <option value="awaiting_insertion">Waiting Insertion</option>
+                    <option value="inserting">Inserting</option>
+                    <option value="active">Active</option>
+                  </select>
+                </label>
+              </form>
+            </header>
+            <div class="panel-body">
+              <div class="table-responsive">
+                <table class="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Session ID</th>
+                      <th>Status</th>
+                      <th>Bottles</th>
+                      <th>Expires In</th>
+                    </tr>
+                  </thead>
+                  <tbody id="table-ongoing">
+                    <tr><td colspan="4" class="empty-cell">No ongoing sessions.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div id="ongoing-pagination" class="table-pagination"></div>
+            </div>
+          </div>
+
+          <!-- Ratings Summary (right, narrower) -->
+          <div class="admin-card panel panel-summary">
+            <header class="panel-header">
+              <div>
+                <h2>Ratings Summary</h2>
+                <p class="panel-subtitle">All-time means per question and composite mean.</p>
+              </div>
+            </header>
+            <div class="panel-body">
+              <div class="ratings-summary-grid">
+                {% for i in range(1, 11) %}
+                  <div class="ratings-summary-item">
+                    <div class="rs-label">Q{{ i }}</div>
+                    <div class="rs-value" id="rating-q{{ i }}">-</div>
+                  </div>
+                {% endfor %}
+                <div class="ratings-summary-item composite">
+                  <div class="rs-label">Composite Mean</div>
+                  <div class="rs-value" id="rating-composite">-</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Ratings -->
+        <section class="admin-card panel panel-full">
+          <header class="panel-header">
+            <div>
+              <h2>User Reviews</h2>
+              <p class="panel-subtitle">Feedback from Wi‑Fi users.</p>
+            </div>
+            <form id="ratings-filter-form" class="panel-filter">
+              <label>
+                From
+                <input type="date" name="from" />
+              </label>
+              <label>
+                To
+                <input type="date" name="to" />
+              </label>
+            </form>
+          </header>
+          <div class="panel-body">
+            <div class="table-responsive">
+              <table class="admin-table admin-table--ratings">
+                <thead>
+                  <tr>
+                    <th>Submitted</th>
+                    <th>Session ID</th>
+                    <th>Q1</th>
+                    <th>Q2</th>
+                    <th>Q3</th>
+                    <th>Q4</th>
+                    <th>Q5</th>
+                    <th>Q6</th>
+                    <th>Q7</th>
+                    <th>Q8</th>
+                    <th>Q9</th>
+                    <th>Q10</th>
+                    <th>Avg</th>
+                    <th>Comment</th>
+                  </tr>
+                </thead>
+                <tbody id="table-ratings">
+                  <tr><td colspan="14" class="empty-cell">No ratings yet.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div id="ratings-pagination" class="table-pagination"></div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+          <a href="{{ url_for('admin_logout') }}" class="btn small outline admin-logout">Log out</a>
+      </footer>
+    </div>
+
+    <div class="toasts" id="toasts"></div>
+
+    <script type="module" src="/static/js/admin.js"></script>
+  </body>
+</html>
