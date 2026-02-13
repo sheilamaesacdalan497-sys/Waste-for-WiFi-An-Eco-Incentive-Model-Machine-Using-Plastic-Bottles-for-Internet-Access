@@ -200,7 +200,7 @@ def create_app(test_config=None):
             session_id = db.acquire_insertion_lock(mac_address=mac_address, ip_address=client_ip)
             
             if not session_id:
-                return jsonify({"error": "Machine is currently busy", "message": "Another user is inserting bottles"}), 409
+                return jsonify({"error": "Machine is currently busy", "message": "Another user is inserting bottles. Please try again in a few minutes."}), 409
             
             session = db.get_session(session_id)
             resp = make_response(jsonify({"session_id": session_id, "session": session}), 200)
@@ -233,13 +233,18 @@ def create_app(test_config=None):
             
             if inserting_session:
                 session_id = inserting_session['id']
-                # If bottles were inserted, revert to active; otherwise expire
-                if inserting_session.get('bottles_inserted', 0) > 0:
+                has_bottles = inserting_session.get('bottles_inserted', 0) > 0
+
+                if has_bottles:
+                    # User already has earned time; go back to ACTIVE
                     db.update_session_status(session_id, db.STATUS_ACTIVE)
                     app.logger.info(f"Reverted session {session_id} to active after unlock")
                 else:
-                    db.update_session_status(session_id, db.STATUS_EXPIRED)
-                    app.logger.info(f"Expired session {session_id} after unlock with no bottles")
+                    # No bottles inserted yet; just release lock and allow another try
+                    db.update_session_status(session_id, db.STATUS_AWAITING_INSERTION)
+                    app.logger.info(
+                        f"Reverted session {session_id} to awaiting_insertion after unlock with no bottles"
+                    )
             
             resp = make_response(jsonify({"success": True, "message": "Insertion lock released"}), 200)
             if set_cookie:

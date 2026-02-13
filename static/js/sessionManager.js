@@ -77,7 +77,6 @@ export async function createSession(mac_address = null, ip_address = null) {
     updateButtonStates(pendingSessionData);
     return { success: true, status: pendingSessionData.status, session: pendingSessionData };
   } catch (err) {
-    console.error('createSession error', err);
     throw err;
   }
 }

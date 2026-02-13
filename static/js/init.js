@@ -47,28 +47,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (insertBtn) {
       insertBtn.addEventListener('click', async (e) => {
         e.preventDefault();
-        console.log('Insert Bottle clicked — current status:', currentSessionStatus);
+        console.log('Insert Bottle clicked — last known status:', currentSessionStatus);
 
         let sid = getCurrentSessionId();
 
-        // Acquire insertion lock
-        if (currentSessionStatus !== 'inserting' && currentSessionStatus !== 'active') {
-          try {
-            const res = await createSession(); // shows toast on 409 and throws
-            sid = res?.session?.id || getCurrentSessionId() || sid;
-            currentSessionStatus =
-              res?.status || res?.session?.status || 'inserting';
-            console.log(
-              'Insertion lock acquired — session:',
-              sid,
-              'status:',
-              currentSessionStatus
-            );
-          } catch (err) {
-            console.warn('Could not acquire insertion lock', err);
-            // Important: do NOT open modal here; toast already shown by createSession()
-            return;
-          }
+        // Always acquire insertion lock from server (awaiting_insertion, active, or already inserting)
+        try {
+          const res = await createSession(); // shows toast on 409 and throws on busy
+          sid = res?.session?.id || getCurrentSessionId() || sid;
+          // Refresh local status from server response
+          currentSessionStatus =
+            res?.status || res?.session?.status || 'inserting';
+          console.log(
+            'Insertion lock acquired — session:',
+            sid,
+            'status:',
+            currentSessionStatus
+          );
+        } catch (err) {
+          console.warn('Could not acquire insertion lock', err);
+          // Do NOT open the modal when lock not acquired
+          return;
         }
 
         // Fetch current session data
@@ -87,7 +86,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           console.warn('Failed to load session data', e2);
         }
 
-        // Open modal
+        // Open modal only after lock has been acquired
         openModal('modal-insert-bottle');
         console.log(
           'Opened insert-bottle modal for session:',

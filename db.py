@@ -419,24 +419,29 @@ def get_session_for_device(mac_address=None, ip_address=None, statuses=None):
 
 def acquire_insertion_lock(mac_address=None, ip_address=None):
     """
-    Attempt to acquire an insertion lock and return a session id.
+    Acquire the machine-wide insertion lock.
 
-    - If there's an existing awaiting_insertion OR inserting session for the same device (mac or ip),
-      transition it to 'inserting' and return that session id.
-    - If another device already holds the inserting lock, return None.
-    - Otherwise create a new session with status=STATUS_INSERTING and return its id.
+    Returns:
+        int session_id on success, or None if another session already holds the lock.
 
-    Uses BEGIN IMMEDIATE to reduce race conditions across processes.
+    Behavior:
+    - If THIS device has a session with status in (awaiting_insertion, active, inserting),
+      prefer the newest one:
+        * awaiting_insertion or active -> transition to inserting and return its id
+        * inserting -> just return its id
+    - If another session (for any device) already has status='inserting', return None.
+    - Otherwise create a new session with status='inserting' and return its id.
+
+    The UNIQUE INDEX on status='inserting' guarantees at most one such row.
     """
     db = get_db()
     now = int(datetime.now(timezone.utc).timestamp())
     cur = db.cursor()
 
     try:
-        # Acquire an immediate transaction lock to avoid races
         db.execute("BEGIN IMMEDIATE")
 
-        # Discover available columns
+        # Get available columns (schema may evolve)
         cur.execute("PRAGMA table_info(sessions)")
         cols_info = cur.fetchall()
         if not cols_info:
@@ -447,88 +452,101 @@ def acquire_insertion_lock(mac_address=None, ip_address=None):
         mac_cols = [c for c in ("mac_address", "mac", "client_mac") if c in available_cols]
         ip_cols = [c for c in ("ip_address", "ip", "client_ip") if c in available_cols]
 
-        # 1) Check if THIS device already has an awaiting_insertion or inserting session
-        same_device_where = []
-        same_params = []
+        # 1) If some session already holds inserting, remember it
+        cur.execute(
+            "SELECT id FROM sessions WHERE status = ? LIMIT 1",
+            (STATUS_INSERTING,),
+        )
+        existing_inserting = cur.fetchone()  # tuple like (id,) or None
 
-        # Prefer MAC; fall back to IP. Avoid mixing multiple devices via loose OR logic.
+        # 2) Find this device's most recent session in (awaiting_insertion, active, inserting)
+        where_parts = []
+        params = []
+
         if mac_address and mac_cols:
-            same_device_where.append(f"{mac_cols[0]} = ?")
-            same_params.append(mac_address)
+            where_parts.append(f"{mac_cols[0]} = ?")
+            params.append(mac_address)
         elif ip_address and ip_cols:
-            same_device_where.append(f"{ip_cols[0]} = ?")
-            same_params.append(ip_address)
+            where_parts.append(f"{ip_cols[0]} = ?")
+            params.append(ip_address)
 
-        if same_device_where:
-            where_sql = "(status = ? OR status = ?) AND " + same_device_where[0]
-            params = [STATUS_AWAITING_INSERTION, STATUS_INSERTING] + same_params
+        row = None
+        if where_parts:
+            where_sql = f"({where_parts[0]}) AND status IN (?, ?, ?)"
+            params_with_status = params + [
+                STATUS_AWAITING_INSERTION,
+                STATUS_ACTIVE,
+                STATUS_INSERTING,
+            ]
             cur.execute(
-                f"SELECT id, status FROM sessions WHERE {where_sql} "
-                "ORDER BY created_at DESC LIMIT 1",
-                tuple(params),
+                f"""
+                SELECT id, status
+                FROM sessions
+                WHERE {where_sql}
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                tuple(params_with_status),
             )
             row = cur.fetchone()
-            if row:
-                existing_id, existing_status = row
-                # Transition to inserting if it was awaiting_insertion
-                if existing_status == STATUS_AWAITING_INSERTION:
-                    cur.execute(
-                        "UPDATE sessions SET status = ?, updated_at = ? WHERE id = ?",
-                        (STATUS_INSERTING, now, existing_id),
-                    )
-                db.commit()
-                return existing_id
 
-        # 2) If any OTHER device has an inserting session, lock is busy
-        cur.execute("SELECT id FROM sessions WHERE status = ? LIMIT 1", (STATUS_INSERTING,))
-        row = cur.fetchone()
         if row:
+            session_id, status = row
+
+            if status == STATUS_INSERTING:
+                # This device already holds the lock
+                db.commit()
+                return session_id
+
+            # Another session (maybe other device) is inserting
+            if existing_inserting and existing_inserting[0] != session_id:
+                db.commit()
+                return None
+
+            # Upgrade this device's session to inserting
+            cur.execute(
+                "UPDATE sessions SET status = ?, updated_at = ? WHERE id = ?",
+                (STATUS_INSERTING, now, session_id),
+            )
+            db.commit()
+            return session_id
+
+        # 3) No session for this device; if someone else is inserting, we're busy
+        if existing_inserting:
             db.commit()
             return None
 
-        # 3) Create a new inserting session
+        # 4) Create a new session in inserting state for this device
         insert_cols = []
         insert_vals = []
+
         if mac_cols and mac_address:
             insert_cols.append(mac_cols[0])
             insert_vals.append(mac_address)
         if ip_cols and ip_address:
             insert_cols.append(ip_cols[0])
             insert_vals.append(ip_address)
-        if "status" in available_cols:
-            insert_cols.append("status")
-            insert_vals.append(STATUS_INSERTING)
-        if "created_at" in available_cols:
-            insert_cols.append("created_at")
-            insert_vals.append(now)
-        if "updated_at" in available_cols:
-            insert_cols.append("updated_at")
-            insert_vals.append(now)
 
-        if not insert_cols:
-            db.rollback()
-            return None
+        insert_cols.extend(["status", "created_at", "updated_at"])
+        insert_vals.extend([STATUS_INSERTING, now, now])
 
-        placeholders = ",".join(["?"] * len(insert_vals))
         cols_sql = ",".join(insert_cols)
+        placeholders = ",".join(["?"] * len(insert_vals))
         cur.execute(
             f"INSERT INTO sessions ({cols_sql}) VALUES ({placeholders})",
             tuple(insert_vals),
         )
-        session_id = cur.lastrowid
+        new_id = cur.lastrowid
         db.commit()
-        return session_id
+        return new_id
 
     except sqlite3.IntegrityError as e:
-        # Hit the UNIQUE index for status='inserting' → someone else holds the lock
+        # UNIQUE(status='inserting') violated -> someone else grabbed the lock
         try:
             db.rollback()
         except Exception:
             pass
-        current_app.logger.warning(
-            "acquire_insertion_lock: integrity error (likely concurrent inserting session): %s",
-            e,
-        )
+        current_app.logger.warning("acquire_insertion_lock: integrity error: %s", e)
         return None
     except Exception:
         try:
@@ -536,6 +554,12 @@ def acquire_insertion_lock(mac_address=None, ip_address=None):
         except Exception:
             pass
         raise
+
+def _row_to_dict(row):
+    """Helper to convert sqlite3.Row to plain dict."""
+    if row is None:
+        return None
+    return {k: row[k] for k in row.keys()}
 
 def expire_stale_awaiting_sessions(max_age_seconds=600):
     """
