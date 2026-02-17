@@ -404,16 +404,16 @@ def create_app(test_config=None):
 
         client_ip = request.remote_addr or request.headers.get("X-Forwarded-For")
         mac_address, is_cookie, set_cookie = get_device_identifier(request)
-
-        # Find a relevant session for this device (active or expired with bottles)
+        # Find a relevant session for this device (allow any known session)
         session = db.get_session_for_device(
             mac_address=mac_address,
             ip_address=client_ip,
-            statuses=(db.STATUS_ACTIVE, db.STATUS_EXPIRED),
+            statuses=db.ALL_SESSION_STATUSES,
         )
 
-        if not session or session.get("bottles_inserted", 0) <= 0:
+        if not session:
             # No eligible session -> send back to main portal
+            return redirect(url_for("index"))
             return redirect(url_for("index"))
 
         resp = make_response(render_template("rate.html"))
@@ -455,11 +455,10 @@ def create_app(test_config=None):
             return jsonify({"error": "Rating already submitted for this session"}), 409
 
         data = request.get_json(silent=True) or {}
-
-        # Validate that all q1..q10 are present and in [1, 5]
+        # Validate that all q1..q14 are present and in [1, 5]
         answers = {}
         missing = []
-        for i in range(1, 11):
+        for i in range(1, 15):
             key = f"q{i}"
             raw = data.get(key)
             if raw is None or raw == "":
@@ -472,12 +471,12 @@ def create_app(test_config=None):
             if v < 1 or v > 5:
                 return jsonify({"error": f"Value for {key} must be between 1 and 5"}), 400
             answers[key] = v
-
         if missing:
             return jsonify({
-                "error": "All questions q1–q10 are required",
+                "error": "All questions q1–q14 are required",
                 "missing": missing,
             }), 400
+
 
         comment = (data.get("comment") or "").strip()
 

@@ -103,6 +103,7 @@ def _create_tables(db):
             session_id INTEGER NOT NULL,
             q1 INTEGER, q2 INTEGER, q3 INTEGER, q4 INTEGER, q5 INTEGER,
             q6 INTEGER, q7 INTEGER, q8 INTEGER, q9 INTEGER, q10 INTEGER,
+            q11 INTEGER, q12 INTEGER, q13 INTEGER, q14 INTEGER,
             comment TEXT,
             submitted_at INTEGER NOT NULL,
             FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
@@ -275,14 +276,15 @@ def submit_rating(session_id, answers, comment=None):
     db.execute('''
         INSERT INTO ratings (
             session_id, q1, q2, q3, q4, q5, q6, q7, q8, q9, q10,
+            q11, q12, q13, q14,
             comment, submitted_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         session_id,
         answers.get('q1'), answers.get('q2'), answers.get('q3'),
         answers.get('q4'), answers.get('q5'), answers.get('q6'),
         answers.get('q7'), answers.get('q8'), answers.get('q9'),
-        answers.get('q10'),
+        answers.get('q10'), answers.get('q11'), answers.get('q12'), answers.get('q13'), answers.get('q14'),
         comment,
         now
     ))
@@ -335,7 +337,7 @@ def get_bottle_logs(session_id):
 
 def get_ratings_means_all_time():
     """
-    All-time mean per question (Q1–Q10) and composite mean (average of question means).
+    All-time mean per question (Q1–Q14) and composite mean (average of question means).
     Each rating row has equal weight.
     """
     db = get_db()
@@ -351,7 +353,11 @@ def get_ratings_means_all_time():
             AVG(q7)  AS q7,
             AVG(q8)  AS q8,
             AVG(q9)  AS q9,
-            AVG(q10) AS q10
+            AVG(q10) AS q10,
+            AVG(q11) AS q11,
+            AVG(q12) AS q12,
+            AVG(q13) AS q13,
+            AVG(q14) AS q14
         FROM ratings
         """
     ).fetchone()
@@ -360,7 +366,7 @@ def get_ratings_means_all_time():
         return {}
 
     means = {}
-    for i in range(1, 11):
+    for i in range(1, 15):
         key = f"q{i}"
         val = row[key]
         means[key] = float(val) if val is not None else None
@@ -375,8 +381,8 @@ def get_ratings_filtered(from_date=None, to_date=None, min_avg=None,
     """
     Filter ratings for admin:
     - from_date, to_date: 'YYYY-MM-DD' (Philippines date)
-    - min_avg: minimum average of q1..q10
-    - question: int 1–10; qmin,qmax: inclusive value range for that question
+    - min_avg: minimum average of q1..q14
+    - question: int 1–14; qmin,qmax: inclusive value range for that question
     """
     db = get_db()
     params = []
@@ -402,11 +408,11 @@ def get_ratings_filtered(from_date=None, to_date=None, min_avg=None,
         params.append(end_ts)
 
     if min_avg is not None:
-        avg_expr = "(" + "+".join([f"COALESCE(r.q{i},0)" for i in range(1, 11)]) + ")/10.0"
+        avg_expr = "(" + "+".join([f"COALESCE(r.q{i},0)" for i in range(1, 15)]) + ")/14.0"
         where.append(avg_expr + " >= ?")
         params.append(float(min_avg))
 
-    if question is not None and 1 <= question <= 10 and qmin is not None:
+    if question is not None and 1 <= question <= 14 and qmin is not None:
         qcol = f"r.q{question}"
         where.append(f"{qcol} >= ?")
         params.append(int(qmin))
@@ -455,7 +461,8 @@ def get_rating_stats():
             AVG(q1) as avg_q1, AVG(q2) as avg_q2, AVG(q3) as avg_q3,
             AVG(q4) as avg_q4, AVG(q5) as avg_q5, AVG(q6) as avg_q6,
             AVG(q7) as avg_q7, AVG(q8) as avg_q8, AVG(q9) as avg_q9,
-            AVG(q10) as avg_q10
+            AVG(q10) as avg_q10, AVG(q11) as avg_q11, AVG(q12) as avg_q12,
+            AVG(q13) as avg_q13, AVG(q14) as avg_q14
         FROM ratings
     ''').fetchone()
     return dict(stats) if stats else {}

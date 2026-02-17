@@ -37,8 +37,8 @@ function updateKpis(payload) {
 }
 
 function updateRatingsSummary(means) {
-  // means: { q1..q10, composite }
-  for (let i = 1; i <= 10; i++) {
+  // means: { q1..q14, composite }
+  for (let i = 1; i <= 14; i++) {
     const el = document.getElementById(`rating-q${i}`);
     if (!el) continue;
     const v = means && typeof means[`q${i}`] === 'number' ? means[`q${i}`] : null;
@@ -234,7 +234,7 @@ function renderRatingsPage() {
 
   if (!ratingsRows.length) {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td colspan="14" class="empty-cell">No ratings found for this date range.</td>`;
+    tr.innerHTML = `<td colspan="18" class="empty-cell">No ratings found for this date range.</td>`;
     tbody.appendChild(tr);
     return;
   }
@@ -247,16 +247,16 @@ function renderRatingsPage() {
 
   pageRows.forEach((r) => {
     const scores = [];
-    for (let i = 1; i <= 10; i++) {
+    for (let i = 1; i <= 14; i++) {
       scores.push(r[`q${i}`] || 0);
     }
-    const avg = (scores.reduce((a, b) => a + b, 0) / 10).toFixed(2);
+    const avg = (scores.reduce((a, b) => a + b, 0) / 14).toFixed(2);
 
     const tr = document.createElement('tr');
     const labels = [
       'Submitted',
       'Session ID',
-      ...Array.from({ length: 10 }, (_, i) => `Q${i + 1}`),
+      ...Array.from({ length: 14 }, (_, i) => `Q${i + 1}`),
       'Avg',
       'Comment',
     ];
@@ -292,20 +292,16 @@ async function loadRatings(params = {}) {
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     let data = await res.json();
-    // Use dummy ratings if backend returns none, for pagination testing
-    if (!data || !data.length) {
-      data = makeDummyRatings();
-    }
-    ratingsRows = data;
+    // Use returned data or empty array; do not inject dummy test data
+    ratingsRows = Array.isArray(data) ? data : [];
     ratingsPage = 1;
     renderRatingsPage();
   } catch (e) {
     console.error('loadRatings error', e);
-    // On error, also fall back to dummy data so you can still test UI
-    ratingsRows = makeDummyRatings();
+    ratingsRows = [];
     ratingsPage = 1;
     renderRatingsPage();
-    showToast('Failed to load ratings. Showing dummy data.', 'error');
+    showToast('Failed to load ratings.', 'error');
   }
 }
 
@@ -319,16 +315,12 @@ async function fetchMetricsOnce() {
     updateKpis(payload);
     updateRatingsSummary(payload.rating_means || {});
 
-    let ongoing = payload.ongoing_sessions || [];
-    // Use dummy ongoing sessions if backend returns none, for pagination testing
-    if (!ongoing.length) {
-      ongoing = makeDummyOngoingSessions();
-    }
+    const ongoing = payload.ongoing_sessions || [];
     renderOngoingTable(ongoing);
   } catch (e) {
     console.error('fetchMetricsOnce error', e);
-    // On error, fall back to dummy ongoing data
-    renderOngoingTable(makeDummyOngoingSessions());
+    showToast('Failed to load metrics.', 'error');
+    renderOngoingTable([]);
   }
 }
 
@@ -396,41 +388,4 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// ---------- DUMMY DATA HELPERS FOR PAGINATION TESTING ----------
-
-function makeDummyOngoingSessions(count = 25) {
-  const now = Math.floor(Date.now() / 1000);
-  const statuses = ['awaiting_insertion', 'inserting', 'active'];
-  const rows = [];
-  for (let i = 1; i <= count; i++) {
-    rows.push({
-      id: i,
-      mac_address: `AA:BB:CC:DD:EE:${String(i).padStart(2, '0')}`,
-      ip_address: `192.168.1.${i}`,
-      status: statuses[i % statuses.length],
-      bottles_inserted: (i % 7) + 1,
-      seconds_earned: ((i % 7) + 1) * 120,
-      session_end: now + (i * 60),
-      updated_at: now - (i * 15),
-    });
-  }
-  return rows;
-}
-
-function makeDummyRatings(count = 35) {
-  const now = Math.floor(Date.now() / 1000);
-  const rows = [];
-  for (let i = 1; i <= count; i++) {
-    const baseScore = (i % 5) + 1;
-    const row = {
-      session_id: i,
-      submitted_at: now - i * 3600,
-      comment: `Dummy review #${i} - this is sample feedback to test pagination.`,
-    };
-    for (let q = 1; q <= 10; q++) {
-      row[`q${q}`] = ((baseScore + q) % 5) + 1;
-    }
-    rows.push(row);
-  }
-  return rows;
-}
+// Dummy data helpers removed for production-ready build

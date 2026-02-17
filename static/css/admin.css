@@ -231,7 +231,7 @@
 
 .admin-table--ratings th:nth-child(1),
 .admin-table--ratings td:nth-child(1) {
-  width: 10.5rem;
+  width: 12rem;
 }
 
 .admin-table--ratings th:nth-child(2),
@@ -248,19 +248,27 @@
 .admin-table--ratings th:nth-child(9),
 .admin-table--ratings th:nth-child(10),
 .admin-table--ratings th:nth-child(11),
-.admin-table--ratings th:nth-child(12){
+.admin-table--ratings th:nth-child(12),
+.admin-table--ratings th:nth-child(13),
+.admin-table--ratings th:nth-child(14),
+.admin-table--ratings th:nth-child(15),
+.admin-table--ratings th:nth-child(16) {
   width: 3.3rem;
   text-align: center;
 }
 
-.admin-table--ratings th:nth-child(13){
+/* Avg column */
+.admin-table--ratings th:nth-child(17),
+.admin-table--ratings td:nth-child(17) {
   width: 8rem;
   text-align: center;
 }
 
-.admin-table--ratings th:nth-child(14),
-.admin-table--ratings td:nth-child(14) {
-  width: 32%;
+/* Comment column */
+.admin-table--ratings th:nth-child(18),
+.admin-table--ratings td:nth-child(18) {
+  width: 24%;
+  text-align: left;
 }
 
 /* Center all td in User Reviews table */
@@ -268,9 +276,17 @@
   text-align: center;
 }
 
-/* also center headers to match */
+/* Keep comment cell left-aligned for readability */
+.admin-table--ratings td:nth-child(18) {
+  text-align: left;
+}
+
+/* also center headers to match (except comment) */
 .admin-table--ratings th {
   text-align: center;
+}
+.admin-table--ratings th:nth-child(18) {
+  text-align: left;
 }
 
 /* Center cells in Ongoing Sessions table */
@@ -416,18 +432,6 @@
     font-size: 0.8rem;
   }
 
-  /* Slightly reduce padding inside ratings table cells on mobile */
-  .admin-table--ratings th,
-  .admin-table--ratings td {
-    padding: 0.55rem 0.4rem;
-  }
-
-  /* On mobile card layout, ignore desktop column widths so all rows span full card width */
-  .admin-table--ratings th,
-  .admin-table--ratings td {
-    width: auto !important;
-  }
-
   /* Turn admin tables into stacked cards on small screens */
   .admin-table,
   .admin-table thead,
@@ -463,8 +467,8 @@
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
+    padding: 0.4rem 0;
     gap: 0.75rem;
-    padding: 0.3rem 0;
     text-align: left; /* override centered text on mobile */
   }
 
@@ -474,6 +478,13 @@
     color: #4a5c7a;
     flex: 0 0 45%;
     max-width: 8rem;
+  } 
+
+  /* Make Avg cell behave like other label/value pairs (label left, value right) */
+  .admin-table--ratings tbody td:nth-child(17) {
+    display: flex;
+    justify-content: space-between;
+    text-align: left; /* label on left, value will appear on the right */
   }
 
   .admin-table tbody td:last-child {
@@ -504,13 +515,24 @@
   .admin-table tbody td[colspan]::before {
     content: '';
   }
+
+    /* On mobile card layout, ignore desktop column widths so all rows span full card width */
+  .admin-table--ratings th,
+  .admin-table--ratings td {
+    width: auto !important;
+  }
+
+    /* Let mobile cells span full card width */
+  .admin-table th,
+  .admin-table td {
+    max-width: none;
+    width: 100%;
+  }
 }
 
 /* Extra-small phones: 480px and below */
 @media (max-width: 480px) {
-  .admin-root {
-    padding: 0.9rem 0.6rem 0.6rem;
-  }
+
 
   .admin-card {
     padding: 0.85rem 0.75rem;

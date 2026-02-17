@@ -51,8 +51,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const payload = {};
     const missing = [];
 
-    // Collect and validate q1..q10 (all required)
-    for (let i = 1; i <= 10; i++) {
+    // Collect and validate q1..q14 (all required)
+    for (let i = 1; i <= 14; i++) {
       const name = `q${i}`;
       const checked = document.querySelector(`input[name="${name}"]:checked`);
       if (!checked) {
@@ -63,7 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (missing.length > 0) {
-      showToast('Please answer all questions (1–10) before submitting.', 'error');
+      showToast('Please answer all questions (1–14) before submitting.', 'error');
       return;
     }
 

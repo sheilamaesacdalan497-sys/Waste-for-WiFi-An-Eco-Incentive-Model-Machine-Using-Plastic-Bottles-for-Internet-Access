@@ -92,7 +92,7 @@
             </header>
             <div class="panel-body">
               <div class="ratings-summary-grid">
-                {% for i in range(1, 11) %}
+                {% for i in range(1, 15) %}
                   <div class="ratings-summary-item">
                     <div class="rs-label">Q{{ i }}</div>
                     <div class="rs-value" id="rating-q{{ i }}">-</div>
@@ -142,12 +142,16 @@
                     <th>Q8</th>
                     <th>Q9</th>
                     <th>Q10</th>
+                    <th>Q11</th>
+                    <th>Q12</th>
+                    <th>Q13</th>
+                    <th>Q14</th>
                     <th>Avg</th>
                     <th>Comment</th>
                   </tr>
                 </thead>
                 <tbody id="table-ratings">
-                  <tr><td colspan="14" class="empty-cell">No ratings yet.</td></tr>
+                  <tr><td colspan="18" class="empty-cell">No ratings yet.</td></tr>
                 </tbody>
               </table>
             </div>
